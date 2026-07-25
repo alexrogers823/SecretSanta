@@ -21,7 +21,7 @@ const SignupForm = ({ onSignupSuccess }) => {
 
       if (response.ok) {
         setError("")
-        onSignupSuccess?.(data.name)
+        onSignupSuccess?.(data)
       } else {
         setError(data.error || "Something went wrong. Please try again.")
       }

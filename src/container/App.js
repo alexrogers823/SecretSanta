@@ -4,19 +4,24 @@ import {
   BrowserRouter as Router,
   Routes
 } from "react-router-dom";
+import { AuthProvider } from '../context/AuthContext';
 import About from '../modules/About';
 import Main from '../modules/Main';
+import UserDashboard from '../modules/UserDashboard';
 
 const App = () => {
   return (
     <div>
       <Router>
-        <div>
-          <Routes>
-            <Route path="/about" element={<About />} />
-            <Route path="/" element={<Main />} />
-          </Routes>
-        </div>
+        <AuthProvider>
+          <div>
+            <Routes>
+              <Route path="/about" element={<About />} />
+              <Route path="/dashboard/:userId" element={<UserDashboard />} />
+              <Route path="/" element={<Main />} />
+            </Routes>
+          </div>
+        </AuthProvider>
       </Router>
     </div>
   )

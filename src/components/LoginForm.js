@@ -13,7 +13,7 @@ const LoginForm = ({ onLoginSuccess }) => {
 
       if (users.length > 0) {
         setError("")
-        onLoginSuccess?.(users[0].name)
+        onLoginSuccess?.(users[0])
       } else {
         setError("No matching user found — check your name and email.")
       }
