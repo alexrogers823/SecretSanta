@@ -4,6 +4,7 @@ import {
   BrowserRouter as Router,
   Routes
 } from "react-router-dom";
+import { Header } from '../common';
 import { AuthProvider } from '../context/AuthContext';
 import About from '../modules/About';
 import Main from '../modules/Main';
@@ -15,6 +16,7 @@ const App = () => {
       <Router>
         <AuthProvider>
           <div>
+            <Header />
             <Routes>
               <Route path="/about" element={<About />} />
               <Route path="/dashboard/:userId" element={<UserDashboard />} />

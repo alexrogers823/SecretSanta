@@ -2,18 +2,18 @@ import { TextField, Typography } from "@mui/material"
 import { useState } from "react"
 import { Form } from "../common"
 
-const SignupForm = ({ onSignupSuccess }) => {
+const EditProfileForm = ({ user, onEditSuccess }) => {
   const [error, setError] = useState("")
 
-  const handleSignupSubmit = async ({ name, email, address }) => {
+  const handleEditSubmit = async ({ name, email, address }) => {
     if (!name?.trim() || !email?.trim() || !address?.trim()) {
       setError("Name, email, and address are required.")
       return
     }
 
     try {
-      const response = await fetch("http://localhost:8000/api/users", {
-        method: "POST",
+      const response = await fetch(`http://localhost:8000/api/users/${user.id}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, address }),
       })
@@ -21,29 +21,29 @@ const SignupForm = ({ onSignupSuccess }) => {
 
       if (response.ok) {
         setError("")
-        onSignupSuccess?.(data)
+        onEditSuccess?.(data)
       } else {
         setError(data.error || "Something went wrong. Please try again.")
       }
     } catch (error) {
-      console.error('Error signing up:', error)
+      console.error('Error updating profile:', error)
       setError("Something went wrong. Please try again.")
     }
   }
 
   return (
     <Form
-      title="Sign Up for Secret Santa"
-      submitButtonText="Register"
-      onSubmit={handleSignupSubmit}
+      title="Edit Your Information"
+      submitButtonText="Save"
+      onSubmit={handleEditSubmit}
       noValidate
     >
-      <TextField id="name" label="Name" variant="standard" required />
-      <TextField id="email" label="Email" variant="standard" required />
-      <TextField id="address" label="Address" variant="standard" multiline required fullWidth />
+      <TextField id="name" label="Name" variant="standard" defaultValue={user.name} required />
+      <TextField id="email" label="Email" variant="standard" defaultValue={user.email} required />
+      <TextField id="address" label="Address" variant="standard" defaultValue={user.address} multiline required fullWidth />
       {error && <Typography color="error" variant="body2">{error}</Typography>}
     </Form>
   )
 }
 
-export default SignupForm
+export default EditProfileForm

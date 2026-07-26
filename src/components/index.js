@@ -1,8 +1,9 @@
 import Countdown from './Countdown'
+import EditProfileForm from './EditProfileForm'
 import LoginForm from './LoginForm'
 import QuestionForm from './QuestionForm'
 import SignupForm from './SignupForm'
-import XmasForm from './XmasForm'
+import XmasForm, { GIFT_OPTIONS } from './XmasForm'
 
-export { Countdown, LoginForm, QuestionForm, SignupForm, XmasForm }
+export { Countdown, EditProfileForm, GIFT_OPTIONS, LoginForm, QuestionForm, SignupForm, XmasForm }
 
