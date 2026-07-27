@@ -7,6 +7,7 @@ import {
 import { Header } from '../common';
 import { AuthProvider } from '../context/AuthContext';
 import About from '../modules/About';
+import AdminPage from '../modules/Admin';
 import Main from '../modules/Main';
 import UserDashboard from '../modules/UserDashboard';
 
@@ -20,6 +21,7 @@ const App = () => {
             <Routes>
               <Route path="/about" element={<About />} />
               <Route path="/dashboard/:userId" element={<UserDashboard />} />
+              <Route path="/admin" element={<AdminPage />} />
               <Route path="/" element={<Main />} />
             </Routes>
           </div>

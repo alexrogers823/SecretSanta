@@ -12,9 +12,29 @@ const MOCK_ASSIGNEE = {
   name: "Jane Doe",
   address: "123 Elf Lane, North Pole",
   gifts: [
-    { gift: "Board game", notes: "Strategy, not party games" },
-    { gift: "Socks", notes: "Size 10" },
+    { gift: "Board game", url: "https://www.example.com/board-game", notes: "Strategy, not party games" },
+    { gift: "Socks", url: "", notes: "Size 10" },
   ],
+}
+
+const flatGiftsToPayload = collected => GIFT_OPTIONS
+  .map(option => ({
+    name: collected[option.id],
+    url: collected[`${option.id}Url`],
+    notes: collected[`${option.id}Notes`],
+  }))
+  .filter(gift => gift.name && gift.name.trim())
+
+const giftsResponseToFlat = gifts => {
+  const flat = {}
+  gifts.forEach((gift, index) => {
+    const option = GIFT_OPTIONS[index]
+    if (!option) return
+    flat[option.id] = gift.name
+    flat[`${option.id}Url`] = gift.url || ""
+    flat[`${option.id}Notes`] = gift.notes || ""
+  })
+  return flat
 }
 
 const UserDashboard = () => {
@@ -24,6 +44,7 @@ const UserDashboard = () => {
   const [openGiftsModal, setOpenGiftsModal] = useState(false)
   const [openQuestionModal, setOpenQuestionModal] = useState(false)
   const [giftData, setGiftData] = useState({})
+  const [giftsError, setGiftsError] = useState("")
 
   const handleOpenProfileModal = () => { setOpenProfileModal(true) }
   const handleCloseProfileModal = () => { setOpenProfileModal(false) }
@@ -37,9 +58,27 @@ const UserDashboard = () => {
     handleCloseProfileModal()
   }
 
-  const handleGiftsSubmit = collected => {
-    setGiftData(collected)
-    handleCloseGiftsModal()
+  const handleGiftsSubmit = async collected => {
+    const gifts = flatGiftsToPayload(collected)
+    try {
+      const response = await fetch(`http://localhost:8000/api/users/${user.id}/gifts`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ gifts }),
+      })
+      const data = await response.json()
+
+      if (response.ok) {
+        setGiftsError("")
+        setGiftData(giftsResponseToFlat(data))
+        handleCloseGiftsModal()
+      } else {
+        setGiftsError(data.error || "Something went wrong. Please try again.")
+      }
+    } catch (error) {
+      console.error('Error saving gifts:', error)
+      setGiftsError("Something went wrong. Please try again.")
+    }
   }
 
   useEffect(() => {
@@ -48,6 +87,23 @@ const UserDashboard = () => {
     }, 1000)
     return () => clearInterval(intervalId)
   }, [])
+
+  useEffect(() => {
+    if (!user?.id) return
+
+    const fetchGifts = async () => {
+      try {
+        const response = await fetch(`http://localhost:8000/api/users/${user.id}/gifts`)
+        if (response.ok) {
+          setGiftData(giftsResponseToFlat(await response.json()))
+        }
+      } catch (error) {
+        console.error('Error fetching gifts:', error)
+      }
+    }
+
+    fetchGifts()
+  }, [user?.id])
 
   if (!user) {
     return <Navigate to="/" replace />
@@ -58,14 +114,14 @@ const UserDashboard = () => {
   const giftFields = GIFT_OPTIONS
     .filter(option => giftData[option.id])
     .map(option => [
-      { label: "Gift", value: giftData[option.id] },
+      { label: "Gift", value: giftData[option.id], url: giftData[`${option.id}Url`] || undefined },
       { label: "Notes", value: giftData[`${option.id}Notes`] || "—" },
     ])
     .flat()
 
   const assigneeGiftFields = MOCK_ASSIGNEE.gifts
-    .map(({ gift, notes }) => [
-      { label: "Gift", value: gift },
+    .map(({ gift, url, notes }) => [
+      { label: "Gift", value: gift, url: url || undefined },
       { label: "Notes", value: notes },
     ])
     .flat()
@@ -124,7 +180,7 @@ const UserDashboard = () => {
         <EditProfileForm user={user} onEditSuccess={handleEditProfileSuccess} />
       </Modal>
       <Modal open={openGiftsModal} handleCloseModal={handleCloseGiftsModal}>
-        <XmasForm initialValues={giftData} onSubmit={handleGiftsSubmit} />
+        <XmasForm initialValues={giftData} onSubmit={handleGiftsSubmit} error={giftsError} />
       </Modal>
       <Modal open={openQuestionModal} handleCloseModal={handleCloseQuestionModal}>
         <QuestionForm />

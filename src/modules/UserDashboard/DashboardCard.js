@@ -13,7 +13,10 @@ const DashboardCard = ({ title, fields = [], emptyMessage, actionLabel, onAction
         {fields.length > 0
           ? fields.map((field, index) => (
             <Typography key={index} variant="body2">
-              <strong>{field.label}:</strong> {field.value}
+              <strong>{field.label}:</strong>{' '}
+              {field.url
+                ? <a href={field.url} target="_blank" rel="noopener noreferrer">{field.value}</a>
+                : field.value}
             </Typography>
           ))
           : <Typography variant="body2" color="text.secondary">{emptyMessage}</Typography>

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState } from 'react';
 
 const STORAGE_KEY = 'secretSantaUser';
+const ADMIN_EMAIL = 'alex.rogers823@gmail.com';
 
 const AuthContext = createContext(null);
 
@@ -29,4 +30,6 @@ const AuthProvider = ({ children }) => {
 
 const useAuth = () => useContext(AuthContext);
 
-export { AuthProvider, useAuth };
+const isAdmin = (user) => user?.email === ADMIN_EMAIL;
+
+export { AuthProvider, useAuth, isAdmin };

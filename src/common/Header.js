@@ -3,7 +3,7 @@ import { AppBar, IconButton, Menu, MenuItem, Toolbar, Typography } from '@mui/ma
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LoginForm, SignupForm } from '../components';
-import { useAuth } from '../context/AuthContext';
+import { isAdmin, useAuth } from '../context/AuthContext';
 import Button from './Button';
 import Modal from './Modal';
 
@@ -45,6 +45,11 @@ const Header = () => {
     navigate(`/dashboard/${user.id}`)
   }
 
+  const handleNavigateAdmin = () => {
+    handleCloseMenu()
+    navigate('/admin')
+  }
+
   const handleLogout = () => {
     logout()
     navigate('/')
@@ -70,6 +75,7 @@ const Header = () => {
               <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleCloseMenu}>
                 <MenuItem onClick={handleNavigateHome}>Home</MenuItem>
                 <MenuItem onClick={handleNavigateDashboard}>Dashboard</MenuItem>
+                {isAdmin(user) && <MenuItem onClick={handleNavigateAdmin}>Admin Page</MenuItem>}
               </Menu>
               <Button onClick={handleLogout} color="inherit">Log Out</Button>
             </Typography>

@@ -1,5 +1,5 @@
 import CardGiftcardOutlinedIcon from '@mui/icons-material/CardGiftcardOutlined';
-import { Stack, TextField } from '@mui/material';
+import { Stack, TextField, Typography } from '@mui/material';
 import React, { Fragment, useEffect, useState } from 'react';
 import { Button, Form } from '../common';
 
@@ -10,7 +10,7 @@ export const GIFT_OPTIONS = [
   { id: "fourthOption", label: "Fourth Option", required: false }
 ]
 
-const XmasForm = ({ initialValues, onSubmit }) => {
+const XmasForm = ({ initialValues, onSubmit, error }) => {
   const filledCount = GIFT_OPTIONS.filter(option => initialValues?.[option.id]).length
   const [giftCounter, setGiftCounter] = useState(Math.max(filledCount, 1))
   const [showButton, setShowButton] = useState(giftCounter <= 3)
@@ -41,6 +41,7 @@ const XmasForm = ({ initialValues, onSubmit }) => {
             <TextField id={`${option.id}Notes`} label="Notes" variant="standard" defaultValue={initialValues?.[`${option.id}Notes`]} fullWidth />
           </Fragment>
         ))}
+        {error && <Typography color="error" variant="body2">{error}</Typography>}
       </Stack>
     </Form>
   )
