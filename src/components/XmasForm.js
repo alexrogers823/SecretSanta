@@ -10,7 +10,7 @@ export const GIFT_OPTIONS = [
   { id: "fourthOption", label: "Fourth Option", required: false }
 ]
 
-const XmasForm = ({ initialValues, onSubmit, error }) => {
+const XmasForm = ({ initialValues, onSubmit, error, userName }) => {
   const filledCount = GIFT_OPTIONS.filter(option => initialValues?.[option.id]).length
   const [giftCounter, setGiftCounter] = useState(Math.max(filledCount, 1))
   const [showButton, setShowButton] = useState(giftCounter <= 3)
@@ -29,7 +29,7 @@ const XmasForm = ({ initialValues, onSubmit, error }) => {
 
   return (
     <Form
-      title="Bro. KT's Form"
+      title={`Bro. ${userName}'s Form`}
       onSubmit={onSubmit}
       actions={showButton && <Button onClick={handleGiftCounter} endIcon={<CardGiftcardOutlinedIcon />}>Add</Button>}
     >

@@ -15,25 +15,34 @@ const AdminPage = () => {
   const [users, setUsers] = useState([])
   const [editingUser, setEditingUser] = useState(null)
   const [deletingUser, setDeletingUser] = useState(null)
+  const [confirmingRegenerate, setConfirmingRegenerate] = useState(false)
+  const [regenerateError, setRegenerateError] = useState("")
 
   useEffect(() => {
     if (!isAdmin(user)) return
 
     const fetchUsersAndGifts = async () => {
       try {
-        const response = await fetch('http://localhost:8000/api/users')
-        if (!response.ok) return
-        const fetchedUsers = await response.json()
+        const [usersResponse, matchesResponse] = await Promise.all([
+          fetch('http://localhost:8000/api/users'),
+          fetch('http://localhost:8000/api/matches'),
+        ])
+        if (!usersResponse.ok) return
+        const fetchedUsers = await usersResponse.json()
+        const matches = matchesResponse.ok ? await matchesResponse.json() : []
+        const assignedToByUserId = Object.fromEntries(
+          matches.map(match => [match.user_id, match.assigned_to])
+        )
 
         const usersWithGifts = await Promise.all(
           fetchedUsers.map(async fetchedUser => {
             try {
               const giftsResponse = await fetch(`http://localhost:8000/api/users/${fetchedUser.id}/gifts`)
               const gifts = giftsResponse.ok ? await giftsResponse.json() : []
-              return { ...fetchedUser, gifts }
+              return { ...fetchedUser, gifts, assignedTo: assignedToByUserId[fetchedUser.id] || null }
             } catch (error) {
               console.error('Error fetching gifts:', error)
-              return { ...fetchedUser, gifts: [] }
+              return { ...fetchedUser, gifts: [], assignedTo: assignedToByUserId[fetchedUser.id] || null }
             }
           })
         )
@@ -73,10 +82,44 @@ const AdminPage = () => {
     }
   }
 
+  const handleConfirmRegenerate = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/matches/regenerate', { method: "POST" })
+      const data = await response.json()
+
+      if (!response.ok) {
+        setRegenerateError(data.error || "Unable to regenerate matches.")
+        return
+      }
+
+      const assignedToByUserId = Object.fromEntries(
+        data.map(match => [match.user_id, match.assigned_to])
+      )
+      setUsers(current => current.map(existing => (
+        { ...existing, assignedTo: assignedToByUserId[existing.id] || null }
+      )))
+      setRegenerateError("")
+      setConfirmingRegenerate(false)
+    } catch (error) {
+      console.error('Error regenerating matches:', error)
+      setRegenerateError("Something went wrong. Please try again.")
+    }
+  }
+
   return (
     <>
       <Container maxWidth="md" sx={{ mt: 2 }}>
-        <Typography variant="h5" gutterBottom>Admin</Typography>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+          <Typography variant="h5" gutterBottom>Admin</Typography>
+          <Button
+            size="small"
+            disabled={users.length < 2}
+            title={users.length < 2 ? "At least 2 users are required to generate matches" : undefined}
+            onClick={() => setConfirmingRegenerate(true)}
+          >
+            Regenerate Matches
+          </Button>
+        </Stack>
         <UserTable
           users={users}
           onEdit={setEditingUser}
@@ -101,6 +144,24 @@ const AdminPage = () => {
           <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
             <Button onClick={() => setDeletingUser(null)}>Cancel</Button>
             <Button color="error" onClick={handleConfirmDelete}>Delete</Button>
+          </Stack>
+        </Paper>
+      </Modal>
+      <Modal
+        open={confirmingRegenerate}
+        handleCloseModal={() => { setConfirmingRegenerate(false); setRegenerateError("") }}
+      >
+        <Paper sx={{ p: 2, maxWidth: 400, mx: "auto", mt: "20vh" }}>
+          <Typography variant="h6" gutterBottom>Regenerate Matches</Typography>
+          <Typography variant="body2" gutterBottom>
+            Are you sure you want to regenerate matches? This will reshuffle everyone's assignment and cannot be undone.
+          </Typography>
+          {regenerateError && (
+            <Typography variant="body2" color="error" gutterBottom>{regenerateError}</Typography>
+          )}
+          <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+            <Button onClick={() => { setConfirmingRegenerate(false); setRegenerateError("") }}>Cancel</Button>
+            <Button color="error" onClick={handleConfirmRegenerate}>Regenerate</Button>
           </Stack>
         </Paper>
       </Modal>

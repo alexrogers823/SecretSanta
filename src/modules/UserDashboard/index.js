@@ -1,21 +1,11 @@
 import { Grid } from '@mui/material';
 import Container from '@mui/material/Container';
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { Box, Button, Modal } from '../../common';
 import { Countdown, EditProfileForm, GIFT_OPTIONS, QuestionForm, XmasForm } from '../../components';
 import { useAuth } from '../../context/AuthContext';
 import DashboardCard from './DashboardCard';
-
-// Placeholder until a real assignee/pairing backend exists.
-const MOCK_ASSIGNEE = {
-  name: "Jane Doe",
-  address: "123 Elf Lane, North Pole",
-  gifts: [
-    { gift: "Board game", url: "https://www.example.com/board-game", notes: "Strategy, not party games" },
-    { gift: "Socks", url: "", notes: "Size 10" },
-  ],
-}
 
 const flatGiftsToPayload = collected => GIFT_OPTIONS
   .map(option => ({
@@ -45,6 +35,10 @@ const UserDashboard = () => {
   const [openQuestionModal, setOpenQuestionModal] = useState(false)
   const [giftData, setGiftData] = useState({})
   const [giftsError, setGiftsError] = useState("")
+  const [assigneeData, setAssigneeData] = useState(null)
+  const [assigneeGifts, setAssigneeGifts] = useState([])
+  const [assigneeError, setAssigneeError] = useState("")
+  const hasRequestedMatch = useRef(false)
 
   const handleOpenProfileModal = () => { setOpenProfileModal(true) }
   const handleCloseProfileModal = () => { setOpenProfileModal(false) }
@@ -105,6 +99,40 @@ const UserDashboard = () => {
     fetchGifts()
   }, [user?.id])
 
+  useEffect(() => {
+    if (counter < 40 || !user?.id || hasRequestedMatch.current) return
+    hasRequestedMatch.current = true
+    let cancelled = false
+
+    const revealMatch = async () => {
+      try {
+        const response = await fetch('http://localhost:8000/api/matches/generate', { method: "POST" })
+        const data = await response.json()
+
+        if (!response.ok) {
+          if (!cancelled) setAssigneeError(data.error || "Unable to reveal your assignment yet.")
+          return
+        }
+
+        const mine = data.find(match => match.user_id === user.id)
+        if (cancelled || !mine?.assigned_to) return
+
+        setAssigneeData(mine.assigned_to)
+
+        const giftsResponse = await fetch(`http://localhost:8000/api/users/${mine.assigned_to.id}/gifts`)
+        if (giftsResponse.ok && !cancelled) {
+          setAssigneeGifts(await giftsResponse.json())
+        }
+      } catch (error) {
+        console.error('Error revealing assignment:', error)
+        if (!cancelled) setAssigneeError("Something went wrong. Please try again.")
+      }
+    }
+
+    revealMatch()
+    return () => { cancelled = true }
+  }, [counter, user?.id])
+
   if (!user) {
     return <Navigate to="/" replace />
   }
@@ -119,12 +147,20 @@ const UserDashboard = () => {
     ])
     .flat()
 
-  const assigneeGiftFields = MOCK_ASSIGNEE.gifts
-    .map(({ gift, url, notes }) => [
-      { label: "Gift", value: gift, url: url || undefined },
-      { label: "Notes", value: notes },
+  const assigneeGiftFields = assigneeGifts
+    .map(gift => [
+      { label: "Gift", value: gift.name, url: gift.url || undefined },
+      { label: "Notes", value: gift.notes || "—" },
     ])
     .flat()
+
+  const assigneeEmptyMessage = assignmentRevealed
+    ? (assigneeError || "Fetching your assignment...")
+    : "Come back after November 27th at 12pm EST to see who you're assigned to"
+
+  const assigneeGiftsEmptyMessage = assignmentRevealed && assigneeData
+    ? `${assigneeData.name} hasn't added their desired gifts yet`
+    : assigneeEmptyMessage
 
   return (
     <>
@@ -145,14 +181,14 @@ const UserDashboard = () => {
           <Grid item xs={12} sm={6}>
             <DashboardCard
               title="Your Chosen LB's Information"
-              fields={assignmentRevealed
+              fields={assignmentRevealed && assigneeData
                 ? [
-                  { label: "Name", value: MOCK_ASSIGNEE.name },
-                  { label: "Address", value: MOCK_ASSIGNEE.address },
+                  { label: "Name", value: assigneeData.name },
+                  { label: "Address", value: assigneeData.address },
                 ]
                 : []
               }
-              emptyMessage="Come back after November 27th at 12pm EST to see who you're assigned to"
+              emptyMessage={assigneeEmptyMessage}
             />
           </Grid>
           <Grid item xs={12} sm={6}>
@@ -167,8 +203,8 @@ const UserDashboard = () => {
           <Grid item xs={12} sm={6}>
             <DashboardCard
               title="His Desired Gifts"
-              fields={assignmentRevealed ? assigneeGiftFields : []}
-              emptyMessage="Assignments haven't been revealed yet"
+              fields={assignmentRevealed && assigneeData ? assigneeGiftFields : []}
+              emptyMessage={assigneeGiftsEmptyMessage}
             />
           </Grid>
         </Grid>
@@ -180,7 +216,7 @@ const UserDashboard = () => {
         <EditProfileForm user={user} onEditSuccess={handleEditProfileSuccess} />
       </Modal>
       <Modal open={openGiftsModal} handleCloseModal={handleCloseGiftsModal}>
-        <XmasForm initialValues={giftData} onSubmit={handleGiftsSubmit} error={giftsError} />
+        <XmasForm initialValues={giftData} onSubmit={handleGiftsSubmit} error={giftsError} userName={user.name} />
       </Modal>
       <Modal open={openQuestionModal} handleCloseModal={handleCloseQuestionModal}>
         <QuestionForm />
