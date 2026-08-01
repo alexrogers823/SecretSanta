@@ -4,7 +4,9 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LoginForm, SignupForm } from '../components';
 import { isAdmin, useAuth } from '../context/AuthContext';
+import { getNextChristmasDate, getNextMatchDate } from '../utils/dateHelpers';
 import Button from './Button';
+import CountdownTimer from './CountdownTimer';
 import Modal from './Modal';
 
 const Header = () => {
@@ -66,6 +68,8 @@ const Header = () => {
           >
             Secret Santa X
           </Typography>
+          <CountdownTimer label="Countdown to Your Match" getTargetDate={getNextMatchDate} />
+          <CountdownTimer label="Countdown to Christmas" getTargetDate={getNextChristmasDate} />
           {user ? (
             <Typography component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography component="span">{`Logged In as ${user.name}`}</Typography>

@@ -156,7 +156,7 @@ const UserDashboard = () => {
 
   const assigneeEmptyMessage = assignmentRevealed
     ? (assigneeError || "Fetching your assignment...")
-    : "Come back after November 27th at 12pm EST to see who you're assigned to"
+    : "Come back after November 25th at 12pm EST to see who you're assigned to"
 
   const assigneeGiftsEmptyMessage = assignmentRevealed && assigneeData
     ? `${assigneeData.name} hasn't added their desired gifts yet`
