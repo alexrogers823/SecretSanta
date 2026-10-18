@@ -4,11 +4,12 @@ import { useEffect, useState } from "react"
 import { Navigate } from "react-router-dom"
 import { Button, Modal } from '../../common'
 import { isAdmin, useAuth } from '../../context/AuthContext'
+import { getFullName } from '../../utils/userHelpers'
 import EditUserForm from './EditUserForm'
 import QuestionsSection from './QuestionsSection'
 import UserTable from './UserTable'
 
-const EMPTY_USER = { id: null, name: '', email: '', address: '' }
+const EMPTY_USER = { id: null, first_name: '', last_name: '', email: '', address: '' }
 
 const AdminPage = () => {
   const { user } = useAuth()
@@ -139,7 +140,7 @@ const AdminPage = () => {
         <Paper sx={{ p: 2, maxWidth: 400, mx: "auto", mt: "20vh" }}>
           <Typography variant="h6" gutterBottom>Delete User</Typography>
           <Typography variant="body2" gutterBottom>
-            {`Are you sure you want to delete ${deletingUser?.name}? This cannot be undone.`}
+            {`Are you sure you want to delete ${getFullName(deletingUser)}? This cannot be undone.`}
           </Typography>
           <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
             <Button onClick={() => setDeletingUser(null)}>Cancel</Button>

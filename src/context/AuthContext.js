@@ -8,7 +8,9 @@ const AuthContext = createContext(null);
 const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : null;
+    const storedUser = stored ? JSON.parse(stored) : null;
+    // Users saved before the first/last name split need to log in again to load their new profile shape
+    return storedUser?.first_name ? storedUser : null;
   });
 
   const login = (loggedInUser) => {

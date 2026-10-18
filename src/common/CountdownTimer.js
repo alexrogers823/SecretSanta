@@ -1,4 +1,4 @@
-import { Typography } from '@mui/material';
+import { Box as MuiBox, Typography } from '@mui/material';
 import { useEffect, useState } from 'react';
 
 const pad2 = n => String(n).padStart(2, '0')
@@ -13,7 +13,7 @@ const getTimeRemaining = targetDate => {
   }
 }
 
-const CountdownTimer = ({ label, getTargetDate }) => {
+const CountdownTimer = ({ label, shortLabel = label, getTargetDate }) => {
   const [remaining, setRemaining] = useState(() => getTimeRemaining(getTargetDate()))
 
   useEffect(() => {
@@ -26,8 +26,10 @@ const CountdownTimer = ({ label, getTargetDate }) => {
   const { days, hours, minutes, seconds } = remaining
 
   return (
-    <Typography component="span" sx={{ whiteSpace: 'nowrap' }}>
-      {`${label}: ${days}d ${pad2(hours)}h ${pad2(minutes)}m ${pad2(seconds)}s`}
+    <Typography component="span" sx={{ whiteSpace: 'nowrap', fontSize: { xs: '0.8rem', md: '0.9rem', lg: '1rem' } }}>
+      <MuiBox component="span" sx={{ display: { xs: 'none', lg: 'inline' } }}>{label}</MuiBox>
+      <MuiBox component="span" sx={{ display: { xs: 'inline', lg: 'none' } }}>{shortLabel}</MuiBox>
+      {`: ${days}d ${pad2(hours)}h ${pad2(minutes)}m ${pad2(seconds)}s`}
     </Typography>
   )
 }

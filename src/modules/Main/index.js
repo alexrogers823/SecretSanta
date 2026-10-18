@@ -1,8 +1,14 @@
+import { Grid, Stack } from '@mui/material';
 import Container from '@mui/material/Container';
 import React, { useEffect, useState } from "react";
-import { Box } from '../../common';
+import { Button, PromptCard } from '../../common';
+import { DashboardPrompt, PhotoUpload } from '../../components';
+import { useAuth } from '../../context/AuthContext';
+import { useAuthModal } from '../../context/AuthModalContext';
 
 const Main = () => {
+  const { user } = useAuth()
+  const { openLogin, openSignup } = useAuthModal()
   const [message, setMessage] = useState({})
 
   useEffect(() => {
@@ -23,9 +29,38 @@ const Main = () => {
   }, []);
 
   return (
-    <Container maxWidth="sm">
+    <Container maxWidth="md" sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
       <p>Welcome to Secret Santa!</p>
-      <Box title={"Signup or login to start adding your desired gifts and other information"} />
+      <Stack justifyContent="center" sx={{ flex: 1, py: 4 }}>
+        <Grid container spacing={4} alignItems="stretch">
+          {user
+            ? (
+              <>
+                <Grid item xs={12} md={6}>
+                  <PhotoUpload />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <DashboardPrompt user={user} />
+                </Grid>
+              </>
+            )
+            : (
+              <>
+                <Grid item xs={12} md={6}>
+                  <PromptCard message="Log in to manage gift requests and review your information">
+                    <Button variant="contained" onClick={openLogin}>Log In</Button>
+                  </PromptCard>
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <PromptCard message="Sign up and join your LBs in the fun!">
+                    <Button variant="contained" onClick={openSignup}>Sign Up</Button>
+                  </PromptCard>
+                </Grid>
+              </>
+            )
+          }
+        </Grid>
+      </Stack>
     </Container>
   )
 }

@@ -2,9 +2,10 @@ import { Grid, Stack } from '@mui/material';
 import Container from '@mui/material/Container';
 import React, { useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { Box, Button, GiftIcon, Modal } from '../../common';
-import { Countdown, EditProfileForm, GIFT_OPTIONS, QuestionForm, XmasForm } from '../../components';
+import { GiftIcon, Modal } from '../../common';
+import { Countdown, EditProfileForm, GIFT_OPTIONS, XmasForm } from '../../components';
 import { useAuth } from '../../context/AuthContext';
+import { getFullName } from '../../utils/userHelpers';
 import DashboardCard from './DashboardCard';
 import Ornament from './Ornament';
 
@@ -33,7 +34,6 @@ const UserDashboard = () => {
   const [counter, setCounter] = useState(0)
   const [openProfileModal, setOpenProfileModal] = useState(false)
   const [openGiftsModal, setOpenGiftsModal] = useState(false)
-  const [openQuestionModal, setOpenQuestionModal] = useState(false)
   const [giftData, setGiftData] = useState({})
   const [giftsError, setGiftsError] = useState("")
   const [assigneeData, setAssigneeData] = useState(null)
@@ -45,8 +45,6 @@ const UserDashboard = () => {
   const handleCloseProfileModal = () => { setOpenProfileModal(false) }
   const handleOpenGiftsModal = () => { setOpenGiftsModal(true) }
   const handleCloseGiftsModal = () => { setOpenGiftsModal(false) }
-  const handleOpenQuestionModal = () => { setOpenQuestionModal(true) }
-  const handleCloseQuestionModal = () => { setOpenQuestionModal(false) }
 
   const handleEditProfileSuccess = updatedUser => {
     login(updatedUser)
@@ -160,13 +158,13 @@ const UserDashboard = () => {
     : "Come back after November 25th at 12pm EST to see who you're assigned to"
 
   const assigneeGiftsEmptyMessage = assignmentRevealed && assigneeData
-    ? `${assigneeData.name} hasn't added their desired gifts yet`
+    ? `${assigneeData.first_name} hasn't added their desired gifts yet`
     : assigneeEmptyMessage
 
   return (
     <>
       <Container maxWidth="lg" sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <p>{`Welcome back, ${user.name}!`}</p>
+        <p>{`Welcome back, ${user.first_name}!`}</p>
         <Stack justifyContent="center" sx={{ flex: 1 }}>
           <Grid container spacing={3} alignItems="center">
             <Grid item xs={12} md={4}>
@@ -186,7 +184,7 @@ const UserDashboard = () => {
                   gradient="primary"
                   icon={<GiftIcon boxColor="primary" ribbonColor="secondary" />}
                   fields={giftFields}
-                  emptyMessage={`${user.name}, you haven't added your desired gifts yet! Let's do that now`}
+                  emptyMessage={`${user.first_name}, you haven't added your desired gifts yet! Let's do that now`}
                   actionLabel={giftFields.length > 0 ? "Edit" : "Add"}
                   onAction={handleOpenGiftsModal}
                 />
@@ -202,7 +200,7 @@ const UserDashboard = () => {
                   gradient="secondary"
                   fields={assignmentRevealed && assigneeData
                     ? [
-                      { label: "Name", value: assigneeData.name },
+                      { label: "Name", value: getFullName(assigneeData) },
                       { label: "Address", value: assigneeData.address },
                     ]
                     : []
@@ -220,20 +218,13 @@ const UserDashboard = () => {
             </Grid>
           </Grid>
         </Stack>
-        <Stack spacing={2} alignItems="flex-start" sx={{ mt: 6, mb: 4 }}>
-          <Box title={"Questions for Bro. Deept4ought? Send anonymously and he will get back to you"} />
-          <Button variant="contained" onClick={handleOpenQuestionModal}>Ask Question</Button>
-        </Stack>
         <Countdown counter={counter} />
       </Container>
       <Modal open={openProfileModal} handleCloseModal={handleCloseProfileModal}>
         <EditProfileForm user={user} onEditSuccess={handleEditProfileSuccess} />
       </Modal>
       <Modal open={openGiftsModal} handleCloseModal={handleCloseGiftsModal}>
-        <XmasForm initialValues={giftData} onSubmit={handleGiftsSubmit} error={giftsError} userName={user.name} />
-      </Modal>
-      <Modal open={openQuestionModal} handleCloseModal={handleCloseQuestionModal}>
-        <QuestionForm />
+        <XmasForm initialValues={giftData} onSubmit={handleGiftsSubmit} error={giftsError} userName={getFullName(user)} />
       </Modal>
     </>
   )

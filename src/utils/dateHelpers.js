@@ -3,16 +3,23 @@
 // applies to both target dates every year.
 const EST_OFFSET_HOURS = 5
 
+const buildEstUTC = (year, month, day, estHour) => Date.UTC(year, month, day, estHour + EST_OFFSET_HOURS, 0, 0)
+
 const getNextOccurrenceUTC = (month, day, estHour) => {
   const now = Date.now()
   const year = new Date().getUTCFullYear()
-  const buildUTC = y => Date.UTC(y, month, day, estHour + EST_OFFSET_HOURS, 0, 0)
-  const targetUTC = buildUTC(year)
-  return new Date(targetUTC <= now ? buildUTC(year + 1) : targetUTC)
+  const targetUTC = buildEstUTC(year, month, day, estHour)
+  return new Date(targetUTC <= now ? buildEstUTC(year + 1, month, day, estHour) : targetUTC)
 }
 
 // November 25th, 12:00pm EST (month is 0-indexed)
 export const getNextMatchDate = () => getNextOccurrenceUTC(10, 25, 12)
+
+// True from this year's match reveal until the end of the year, when the countdown starts over
+export const isMatchRevealed = () => {
+  const now = new Date()
+  return now.getTime() >= buildEstUTC(now.getUTCFullYear(), 10, 25, 12)
+}
 
 // December 25th, 12:00am EST
 export const getNextChristmasDate = () => getNextOccurrenceUTC(11, 25, 0)

@@ -4,6 +4,7 @@ import {
 } from "@mui/material"
 import { useState } from "react"
 import { Button } from "../../common"
+import { getFullName } from "../../utils/userHelpers"
 
 const UserTable = ({ users, onEdit, onDelete, currentAdminEmail }) => {
   const [revealedIds, setRevealedIds] = useState(new Set())
@@ -43,7 +44,7 @@ const UserTable = ({ users, onEdit, onDelete, currentAdminEmail }) => {
 
             return (
               <TableRow key={user.id}>
-                <TableCell>{user.name}</TableCell>
+                <TableCell>{getFullName(user)}</TableCell>
                 <TableCell>{user.email}</TableCell>
                 <TableCell>{user.address}</TableCell>
                 <TableCell>{giftSummary}</TableCell>
@@ -52,7 +53,7 @@ const UserTable = ({ users, onEdit, onDelete, currentAdminEmail }) => {
                     ? "Not generated"
                     : (
                       <Button size="small" onClick={() => toggleRevealed(user.id)}>
-                        {isRevealed ? user.assignedTo.name : "Reveal"}
+                        {isRevealed ? getFullName(user.assignedTo) : "Reveal"}
                       </Button>
                     )
                   }

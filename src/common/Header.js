@@ -1,38 +1,18 @@
 import MenuIcon from '@mui/icons-material/Menu';
-import { AppBar, IconButton, Menu, MenuItem, Toolbar, Typography } from '@mui/material';
+import { AppBar, IconButton, Menu, MenuItem, Box as MuiBox, Stack, Toolbar, Typography } from '@mui/material';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LoginForm, SignupForm } from '../components';
 import { isAdmin, useAuth } from '../context/AuthContext';
+import { useAuthModal } from '../context/AuthModalContext';
 import { getNextChristmasDate, getNextMatchDate } from '../utils/dateHelpers';
 import Button from './Button';
 import CountdownTimer from './CountdownTimer';
-import Modal from './Modal';
 
 const Header = () => {
-  const { user, login, logout } = useAuth()
+  const { user, logout } = useAuth()
+  const { openLogin, openSignup } = useAuthModal()
   const navigate = useNavigate()
-  const [openLogin, setOpenLogin] = useState(false)
-  const [openSignup, setOpenSignup] = useState(false)
   const [anchorEl, setAnchorEl] = useState(null)
-
-  const handleOpenLogin = () => setOpenLogin(true)
-  const handleCloseLogin = () => setOpenLogin(false)
-
-  const handleLoginSuccess = loggedInUser => {
-    login(loggedInUser)
-    handleCloseLogin()
-    navigate(`/dashboard/${loggedInUser.id}`)
-  }
-
-  const handleOpenSignup = () => setOpenSignup(true)
-  const handleCloseSignup = () => setOpenSignup(false)
-
-  const handleSignupSuccess = signedUpUser => {
-    login(signedUpUser)
-    handleCloseSignup()
-    navigate(`/dashboard/${signedUpUser.id}`)
-  }
 
   const handleOpenMenu = event => setAnchorEl(event.currentTarget)
   const handleCloseMenu = () => setAnchorEl(null)
@@ -60,19 +40,31 @@ const Header = () => {
   return (
     <>
       <AppBar position="static">
-        <Toolbar sx={{ justifyContent: 'space-between' }}>
+        <Toolbar sx={{ justifyContent: 'space-between', flexWrap: 'wrap', columnGap: 2 }}>
           <Typography
             variant="h6"
+            noWrap
             onClick={() => navigate('/')}
-            sx={{ cursor: 'pointer' }}
+            sx={{ cursor: 'pointer', fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
           >
             Secret Santa X
           </Typography>
-          <CountdownTimer label="Countdown to Your Match" getTargetDate={getNextMatchDate} />
-          <CountdownTimer label="Countdown to Christmas" getTargetDate={getNextChristmasDate} />
+          <Stack
+            direction={{ xs: 'row', sm: 'column', md: 'row' }}
+            justifyContent="center"
+            alignItems="center"
+            columnGap={{ xs: 2, md: 4, lg: 8 }}
+            sx={{ order: { xs: 1, sm: 0 }, width: { xs: '100%', sm: 'auto' }, pb: { xs: 1, sm: 0 } }}
+          >
+            <CountdownTimer label="Countdown to Your Match" shortLabel="Match" getTargetDate={getNextMatchDate} />
+            <CountdownTimer label="Countdown to Christmas" shortLabel="Christmas" getTargetDate={getNextChristmasDate} />
+          </Stack>
           {user ? (
             <Typography component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography component="span">{`Logged In as ${user.name}`}</Typography>
+              <Typography component="span" noWrap sx={{ display: { xs: 'none', sm: 'block' } }}>
+                <MuiBox component="span" sx={{ display: { xs: 'none', lg: 'inline' } }}>Logged In as </MuiBox>
+                {user.first_name}
+              </Typography>
               <IconButton color="inherit" onClick={handleOpenMenu}>
                 <MenuIcon />
               </IconButton>
@@ -81,22 +73,16 @@ const Header = () => {
                 <MenuItem onClick={handleNavigateDashboard}>Dashboard</MenuItem>
                 {isAdmin(user) && <MenuItem onClick={handleNavigateAdmin}>Admin Page</MenuItem>}
               </Menu>
-              <Button onClick={handleLogout} color="inherit">Log Out</Button>
+              <Button onClick={handleLogout} color="inherit" sx={{ whiteSpace: 'nowrap' }}>Log Out</Button>
             </Typography>
           ) : (
             <Typography component="div" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Button onClick={handleOpenLogin} color="inherit">Log In</Button>
-              <Button onClick={handleOpenSignup} color="inherit">Sign Up</Button>
+              <Button onClick={openLogin} color="inherit" sx={{ whiteSpace: 'nowrap' }}>Log In</Button>
+              <Button onClick={openSignup} color="inherit" sx={{ whiteSpace: 'nowrap' }}>Sign Up</Button>
             </Typography>
           )}
         </Toolbar>
       </AppBar>
-      <Modal open={openLogin} handleCloseModal={handleCloseLogin}>
-        <LoginForm onLoginSuccess={handleLoginSuccess} />
-      </Modal>
-      <Modal open={openSignup} handleCloseModal={handleCloseSignup}>
-        <SignupForm onSignupSuccess={handleSignupSuccess} />
-      </Modal>
     </>
   )
 }

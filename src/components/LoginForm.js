@@ -5,9 +5,9 @@ import { Form } from "../common"
 const LoginForm = ({ onLoginSuccess }) => {
   const [error, setError] = useState("")
 
-  const handleLoginSubmit = async ({ name, email }) => {
+  const handleLoginSubmit = async ({ first_name, email }) => {
     try {
-      const params = new URLSearchParams({ name, email })
+      const params = new URLSearchParams({ first_name, email })
       const response = await fetch(`http://localhost:8000/api/users?${params}`)
       const users = response.ok ? await response.json() : []
 
@@ -15,11 +15,11 @@ const LoginForm = ({ onLoginSuccess }) => {
         setError("")
         onLoginSuccess?.(users[0])
       } else {
-        setError("No matching user found — check your name and email.")
+        setError("No matching user found — check your first name and email.")
       }
     } catch (error) {
       console.error('Error logging in:', error)
-      setError("No matching user found — check your name and email.")
+      setError("No matching user found — check your first name and email.")
     }
   }
 
@@ -30,7 +30,7 @@ const LoginForm = ({ onLoginSuccess }) => {
       onSubmit={handleLoginSubmit}
     >
       {/* make dropdown of already registered brothers as name field  */}
-      <TextField id="name" label="Name" variant="standard" required />
+      <TextField id="first_name" label="First Name" variant="standard" required />
       <TextField id="email" label="email" variant="standard" required />
       {error && <Typography color="error" variant="body2">{error}</Typography>}
     </Form>
