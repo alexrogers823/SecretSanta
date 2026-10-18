@@ -1,11 +1,12 @@
-import { Grid } from '@mui/material';
+import { Grid, Stack } from '@mui/material';
 import Container from '@mui/material/Container';
 import React, { useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
-import { Box, Button, Modal } from '../../common';
+import { Box, Button, GiftIcon, Modal } from '../../common';
 import { Countdown, EditProfileForm, GIFT_OPTIONS, QuestionForm, XmasForm } from '../../components';
 import { useAuth } from '../../context/AuthContext';
 import DashboardCard from './DashboardCard';
+import Ornament from './Ornament';
 
 const flatGiftsToPayload = collected => GIFT_OPTIONS
   .map(option => ({
@@ -164,52 +165,65 @@ const UserDashboard = () => {
 
   return (
     <>
-      <Container maxWidth="md">
+      <Container maxWidth="lg" sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <p>{`Welcome back, ${user.name}!`}</p>
-        <Grid container spacing={2} sx={{ mb: 2 }}>
-          <Grid item xs={12} sm={6}>
-            <DashboardCard
-              title="Your Information"
-              fields={[
-                { label: "Address", value: user.address },
-                { label: "Email", value: user.email },
-              ]}
-              actionLabel="Edit"
-              onAction={handleOpenProfileModal}
-            />
+        <Stack justifyContent="center" sx={{ flex: 1 }}>
+          <Grid container spacing={3} alignItems="center">
+            <Grid item xs={12} md={4}>
+              <Stack spacing={3}>
+                <DashboardCard
+                  title="Your Information"
+                  gradient="primary"
+                  fields={[
+                    { label: "Address", value: user.address },
+                    { label: "Email", value: user.email },
+                  ]}
+                  actionLabel="Edit"
+                  onAction={handleOpenProfileModal}
+                />
+                <DashboardCard
+                  title="Your Desired Gifts"
+                  gradient="primary"
+                  icon={<GiftIcon boxColor="primary" ribbonColor="secondary" />}
+                  fields={giftFields}
+                  emptyMessage={`${user.name}, you haven't added your desired gifts yet! Let's do that now`}
+                  actionLabel={giftFields.length > 0 ? "Edit" : "Add"}
+                  onAction={handleOpenGiftsModal}
+                />
+              </Stack>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Ornament />
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Stack spacing={3}>
+                <DashboardCard
+                  title="Your Chosen LB's Information"
+                  gradient="secondary"
+                  fields={assignmentRevealed && assigneeData
+                    ? [
+                      { label: "Name", value: assigneeData.name },
+                      { label: "Address", value: assigneeData.address },
+                    ]
+                    : []
+                  }
+                  emptyMessage={assigneeEmptyMessage}
+                />
+                <DashboardCard
+                  title="His Desired Gifts"
+                  gradient="secondary"
+                  icon={<GiftIcon boxColor="secondary" ribbonColor="primary" />}
+                  fields={assignmentRevealed && assigneeData ? assigneeGiftFields : []}
+                  emptyMessage={assigneeGiftsEmptyMessage}
+                />
+              </Stack>
+            </Grid>
           </Grid>
-          <Grid item xs={12} sm={6}>
-            <DashboardCard
-              title="Your Chosen LB's Information"
-              fields={assignmentRevealed && assigneeData
-                ? [
-                  { label: "Name", value: assigneeData.name },
-                  { label: "Address", value: assigneeData.address },
-                ]
-                : []
-              }
-              emptyMessage={assigneeEmptyMessage}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <DashboardCard
-              title="Your Desired Gifts"
-              fields={giftFields}
-              emptyMessage={`${user.name}, you haven't added your desired gifts yet! Let's do that now`}
-              actionLabel={giftFields.length > 0 ? "Edit" : "Add"}
-              onAction={handleOpenGiftsModal}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <DashboardCard
-              title="His Desired Gifts"
-              fields={assignmentRevealed && assigneeData ? assigneeGiftFields : []}
-              emptyMessage={assigneeGiftsEmptyMessage}
-            />
-          </Grid>
-        </Grid>
-        <Box title={"Questions for Bro. Deept4ought? Send anonymously and he will get back to you"} />
-        <Button onClick={handleOpenQuestionModal}>Ask Question</Button>
+        </Stack>
+        <Stack spacing={2} alignItems="flex-start" sx={{ mt: 6, mb: 4 }}>
+          <Box title={"Questions for Bro. Deept4ought? Send anonymously and he will get back to you"} />
+          <Button variant="contained" onClick={handleOpenQuestionModal}>Ask Question</Button>
+        </Stack>
         <Countdown counter={counter} />
       </Container>
       <Modal open={openProfileModal} handleCloseModal={handleCloseProfileModal}>
