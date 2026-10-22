@@ -17,7 +17,7 @@ const getGradientSx = gradient => {
   }
 }
 
-const DashboardCard = ({ title, icon, gradient, fields = [], emptyMessage, actionLabel, onAction }) => {
+const DashboardCard = ({ title, icon, gradient, media, fields = [], emptyMessage, actionLabel, onAction }) => {
   return (
     <Paper sx={{ p: 2, height: '100%', ...getGradientSx(gradient) }}>
       <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={2}>
@@ -29,6 +29,7 @@ const DashboardCard = ({ title, icon, gradient, fields = [], emptyMessage, actio
         </Stack>
         {actionLabel && <Button size="small" color={gradient ? "inherit" : "primary"} onClick={onAction}>{actionLabel}</Button>}
       </Stack>
+      {media && <MuiBox sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>{media}</MuiBox>}
       <Stack spacing={1}>
         {fields.length > 0
           ? fields.map((field, index) => (

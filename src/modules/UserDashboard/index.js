@@ -3,11 +3,12 @@ import Container from '@mui/material/Container';
 import React, { useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { GiftIcon, Modal } from '../../common';
-import { Countdown, EditProfileForm, GIFT_OPTIONS, XmasForm } from '../../components';
+import { EditProfileForm, GIFT_OPTIONS, XmasForm } from '../../components';
 import { useAuth } from '../../context/AuthContext';
 import { getFullName } from '../../utils/userHelpers';
 import DashboardCard from './DashboardCard';
 import Ornament from './Ornament';
+import ProfileSlot from './ProfileSlot';
 
 const flatGiftsToPayload = collected => GIFT_OPTIONS
   .map(option => ({
@@ -172,6 +173,7 @@ const UserDashboard = () => {
                 <DashboardCard
                   title="Your Information"
                   gradient="primary"
+                  media={<ProfileSlot user={user} />}
                   fields={[
                     { label: "Address", value: user.address },
                     { label: "Email", value: user.email },
@@ -198,9 +200,11 @@ const UserDashboard = () => {
                 <DashboardCard
                   title="Your Chosen LB's Information"
                   gradient="secondary"
+                  media={assignmentRevealed && assigneeData ? <ProfileSlot user={assigneeData} /> : null}
                   fields={assignmentRevealed && assigneeData
                     ? [
-                      { label: "Name", value: getFullName(assigneeData) },
+                      // Without a picture, ProfileSlot already shows the full name
+                      ...(assigneeData.profile_picture_url ? [{ label: "Name", value: getFullName(assigneeData) }] : []),
                       { label: "Address", value: assigneeData.address },
                     ]
                     : []
@@ -218,7 +222,6 @@ const UserDashboard = () => {
             </Grid>
           </Grid>
         </Stack>
-        <Countdown counter={counter} />
       </Container>
       <Modal open={openProfileModal} handleCloseModal={handleCloseProfileModal}>
         <EditProfileForm user={user} onEditSuccess={handleEditProfileSuccess} />

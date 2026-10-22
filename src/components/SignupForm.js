@@ -1,9 +1,12 @@
 import { TextField, Typography } from "@mui/material"
 import { useState } from "react"
 import { Form } from "../common"
+import { uploadProfilePicture } from "../utils/profilePicture"
+import ProfilePictureInput from "./ProfilePictureInput"
 
 const SignupForm = ({ onSignupSuccess }) => {
   const [error, setError] = useState("")
+  const [profilePicture, setProfilePicture] = useState(null)
 
   const handleSignupSubmit = async ({ first_name, last_name, email, address }) => {
     if (!first_name?.trim() || !last_name?.trim() || !email?.trim() || !address?.trim()) {
@@ -21,7 +24,16 @@ const SignupForm = ({ onSignupSuccess }) => {
 
       if (response.ok) {
         setError("")
-        onSignupSuccess?.(data)
+        let signedUpUser = data
+        if (profilePicture) {
+          try {
+            signedUpUser = await uploadProfilePicture(data.id, profilePicture)
+          } catch (uploadError) {
+            // The account already exists, so continue; the picture can be added later from Edit
+            console.error('Error uploading profile picture:', uploadError)
+          }
+        }
+        onSignupSuccess?.(signedUpUser)
       } else {
         setError(data.error || "Something went wrong. Please try again.")
       }
@@ -42,6 +54,7 @@ const SignupForm = ({ onSignupSuccess }) => {
       <TextField id="last_name" label="Last Name" variant="standard" required />
       <TextField id="email" label="Email" variant="standard" required />
       <TextField id="address" label="Address" variant="standard" multiline required fullWidth />
+      <ProfilePictureInput file={profilePicture} onChange={setProfilePicture} />
       {error && <Typography color="error" variant="body2">{error}</Typography>}
     </Form>
   )
