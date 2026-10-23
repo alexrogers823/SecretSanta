@@ -1,3 +1,4 @@
+from flask import url_for
 from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
@@ -7,9 +8,12 @@ class User(db.Model):
     __tablename__ = "users"
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(120), nullable=False)
+    first_name = db.Column(db.String(120), nullable=False)
+    # Nullable only so older rows created before the name split still load
+    last_name = db.Column(db.String(120), nullable=True)
     email = db.Column(db.String(120), nullable=False, unique=True)
     address = db.Column(db.String(255), nullable=False)
+    profile_picture = db.Column(db.String(255), nullable=True)
     assigned_to_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
 
     gifts = db.relationship(
@@ -26,7 +30,20 @@ class User(db.Model):
     )
 
     def to_dict(self):
-        return {"id": self.id, "name": self.name, "email": self.email, "address": self.address}
+        return {
+            "id": self.id,
+            "first_name": self.first_name,
+            "last_name": self.last_name,
+            "email": self.email,
+            "address": self.address,
+            "profile_picture_url": self.profile_picture_url(),
+        }
+
+    def profile_picture_url(self):
+        if not self.profile_picture:
+            return None
+        # The filename changes on every upload, so it doubles as a cache buster
+        return url_for("users.get_profile_picture", user_id=self.id, v=self.profile_picture, _external=True)
 
 
 class Gift(db.Model):
