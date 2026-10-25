@@ -67,3 +67,10 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+
+# vscode config file
+.vscode
+
+# Copies of shared/ made by scripts/sync_shared.sh for deploys
+flask_server/shared/
+functions/shared/

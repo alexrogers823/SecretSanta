@@ -1,23 +1,33 @@
-from flask import Blueprint, jsonify, request
-from sqlalchemy.exc import IntegrityError
+from urllib.parse import urlparse
 
-from models import Gift, User, db
+from flask import Blueprint, g, jsonify, request
 
-gifts_bp = Blueprint("gifts", __name__, url_prefix="/api/users/<int:user_id>/gifts")
+import repository
+from auth import require_user
+
+gifts_bp = Blueprint("gifts", __name__, url_prefix="/api/me/gifts")
 
 MAX_GIFTS = 4  # keep in sync with client GIFT_OPTIONS length
 
 
+def _is_web_url(url):
+    # Only http(s): a javascript: URL would run in the gift-giver's browser when they click it
+    parsed = urlparse(url)
+    return parsed.scheme in ("http", "https") and bool(parsed.netloc)
+
+
 @gifts_bp.route("", methods=["GET"])
-def list_gifts(user_id):
-    User.query.get_or_404(user_id)
-    gifts = Gift.query.filter_by(user_id=user_id).order_by(Gift.position).all()
-    return jsonify([gift.to_dict() for gift in gifts])
+@require_user
+def list_gifts():
+    user = repository.get_user(g.uid)
+    if not user:
+        return jsonify({"error": "profile not found"}), 404
+    return jsonify(repository.serialize_gifts(user))
 
 
 @gifts_bp.route("", methods=["PUT"])
-def replace_gifts(user_id):
-    User.query.get_or_404(user_id)
+@require_user
+def replace_gifts():
     data = request.get_json(silent=True) or {}
     payload = data.get("gifts")
 
@@ -28,24 +38,17 @@ def replace_gifts(user_id):
 
     new_gifts = []
     for index, item in enumerate(payload):
-        item = item or {}
-        name = item.get("name")
-        if not name or not str(name).strip():
+        item = item if isinstance(item, dict) else {}
+        name = str(item.get("name") or "").strip()
+        url = str(item.get("url") or "").strip() or None
+        notes = str(item.get("notes") or "").strip() or None
+        if not name:
             return jsonify({"error": f"gift {index + 1} is missing a name"}), 400
-        new_gifts.append(Gift(
-            user_id=user_id,
-            name=str(name).strip(),
-            url=(item.get("url") or None),
-            notes=(item.get("notes") or None),
-            position=index,
-        ))
+        if url and not _is_web_url(url):
+            return jsonify({"error": f"gift {index + 1} link must start with http:// or https://"}), 400
+        new_gifts.append({"name": name, "url": url, "notes": notes})
 
-    Gift.query.filter_by(user_id=user_id).delete()
-    db.session.add_all(new_gifts)
-    try:
-        db.session.commit()
-    except IntegrityError:
-        db.session.rollback()
-        return jsonify({"error": "unable to save gifts"}), 409
-
-    return jsonify([gift.to_dict() for gift in new_gifts])
+    user = repository.set_gifts(g.uid, new_gifts)
+    if not user:
+        return jsonify({"error": "profile not found"}), 404
+    return jsonify(repository.serialize_gifts(user))
