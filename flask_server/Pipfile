@@ -11,6 +11,7 @@ google-cloud-storage = "*"
 gunicorn = "*"
 
 [dev-packages]
+pytest = "*"
 
 [scripts]
 start = "python server.py"

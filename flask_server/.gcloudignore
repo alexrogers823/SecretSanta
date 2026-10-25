@@ -9,3 +9,6 @@ Dockerfile
 .dockerignore
 .gcloudignore
 .env.example
+tests/
+pytest.ini
+.pytest_cache/
