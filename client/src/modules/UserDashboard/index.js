@@ -1,10 +1,12 @@
-import { Grid, Stack } from '@mui/material';
+import { Grid, Box as MuiBox, Stack } from '@mui/material';
 import Container from '@mui/material/Container';
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
+import { apiFetch, getErrorMessage } from '../../api/client';
 import { GiftIcon, Modal } from '../../common';
-import { EditProfileForm, GIFT_OPTIONS, XmasForm } from '../../components';
+import { EditProfileForm, GIFT_OPTIONS, PhotoGallery, XmasForm } from '../../components';
 import { useAuth } from '../../context/AuthContext';
+import useMatch from '../../hooks/useMatch';
 import { getFullName } from '../../utils/userHelpers';
 import DashboardCard from './DashboardCard';
 import Ornament from './Ornament';
@@ -31,16 +33,13 @@ const giftsResponseToFlat = gifts => {
 }
 
 const UserDashboard = () => {
-  const { user, login } = useAuth()
-  const [counter, setCounter] = useState(0)
+  const { user, loading, updateUser } = useAuth()
   const [openProfileModal, setOpenProfileModal] = useState(false)
   const [openGiftsModal, setOpenGiftsModal] = useState(false)
   const [giftData, setGiftData] = useState({})
   const [giftsError, setGiftsError] = useState("")
-  const [assigneeData, setAssigneeData] = useState(null)
-  const [assigneeGifts, setAssigneeGifts] = useState([])
-  const [assigneeError, setAssigneeError] = useState("")
-  const hasRequestedMatch = useRef(false)
+  // {revealed, reveal_at, receiver, gifts} from /api/matches/me; null until it loads
+  const { match, error: assigneeError } = useMatch()
 
   const handleOpenProfileModal = () => { setOpenProfileModal(true) }
   const handleCloseProfileModal = () => { setOpenProfileModal(false) }
@@ -48,49 +47,29 @@ const UserDashboard = () => {
   const handleCloseGiftsModal = () => { setOpenGiftsModal(false) }
 
   const handleEditProfileSuccess = updatedUser => {
-    login(updatedUser)
+    updateUser(updatedUser)
     handleCloseProfileModal()
   }
 
   const handleGiftsSubmit = async collected => {
     const gifts = flatGiftsToPayload(collected)
     try {
-      const response = await fetch(`http://localhost:8000/api/users/${user.id}/gifts`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gifts }),
-      })
-      const data = await response.json()
-
-      if (response.ok) {
-        setGiftsError("")
-        setGiftData(giftsResponseToFlat(data))
-        handleCloseGiftsModal()
-      } else {
-        setGiftsError(data.error || "Something went wrong. Please try again.")
-      }
+      const savedGifts = await apiFetch("/api/me/gifts", { method: "PUT", body: { gifts } })
+      setGiftsError("")
+      setGiftData(giftsResponseToFlat(savedGifts))
+      handleCloseGiftsModal()
     } catch (error) {
       console.error('Error saving gifts:', error)
-      setGiftsError("Something went wrong. Please try again.")
+      setGiftsError(getErrorMessage(error))
     }
   }
-
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      setCounter(time => time + 1)
-    }, 1000)
-    return () => clearInterval(intervalId)
-  }, [])
 
   useEffect(() => {
     if (!user?.id) return
 
     const fetchGifts = async () => {
       try {
-        const response = await fetch(`http://localhost:8000/api/users/${user.id}/gifts`)
-        if (response.ok) {
-          setGiftData(giftsResponseToFlat(await response.json()))
-        }
+        setGiftData(giftsResponseToFlat(await apiFetch("/api/me/gifts")))
       } catch (error) {
         console.error('Error fetching gifts:', error)
       }
@@ -99,45 +78,15 @@ const UserDashboard = () => {
     fetchGifts()
   }, [user?.id])
 
-  useEffect(() => {
-    if (counter < 40 || !user?.id || hasRequestedMatch.current) return
-    hasRequestedMatch.current = true
-    let cancelled = false
-
-    const revealMatch = async () => {
-      try {
-        const response = await fetch('http://localhost:8000/api/matches/generate', { method: "POST" })
-        const data = await response.json()
-
-        if (!response.ok) {
-          if (!cancelled) setAssigneeError(data.error || "Unable to reveal your assignment yet.")
-          return
-        }
-
-        const mine = data.find(match => match.user_id === user.id)
-        if (cancelled || !mine?.assigned_to) return
-
-        setAssigneeData(mine.assigned_to)
-
-        const giftsResponse = await fetch(`http://localhost:8000/api/users/${mine.assigned_to.id}/gifts`)
-        if (giftsResponse.ok && !cancelled) {
-          setAssigneeGifts(await giftsResponse.json())
-        }
-      } catch (error) {
-        console.error('Error revealing assignment:', error)
-        if (!cancelled) setAssigneeError("Something went wrong. Please try again.")
-      }
-    }
-
-    revealMatch()
-    return () => { cancelled = true }
-  }, [counter, user?.id])
-
+  // Wait for Firebase to restore the session before deciding the user is signed out
+  if (loading) return null
   if (!user) {
     return <Navigate to="/" replace />
   }
 
-  const assignmentRevealed = counter >= 40
+  const assignmentRevealed = !!match?.revealed
+  const assigneeData = match?.receiver || null
+  const assigneeGifts = match?.gifts || []
 
   const giftFields = GIFT_OPTIONS
     .filter(option => giftData[option.id])
@@ -154,9 +103,11 @@ const UserDashboard = () => {
     ])
     .flat()
 
-  const assigneeEmptyMessage = assignmentRevealed
-    ? (assigneeError || "Fetching your assignment...")
-    : "Come back after November 25th at 12pm EST to see who you're assigned to"
+  const assigneeEmptyMessage = assigneeError
+    || (!match && "Checking for your assignment...")
+    // Revealed but no receiver: they left after the draw, and matches are being redrawn
+    || (assignmentRevealed && "Your assignment is being updated. Check back soon.")
+    || "Come back after November 25th at 12pm EST to see who you're assigned to"
 
   const assigneeGiftsEmptyMessage = assignmentRevealed && assigneeData
     ? `${assigneeData.first_name} hasn't added their desired gifts yet`
@@ -222,6 +173,9 @@ const UserDashboard = () => {
             </Grid>
           </Grid>
         </Stack>
+        <MuiBox sx={{ mt: 4 }}>
+          <PhotoGallery />
+        </MuiBox>
       </Container>
       <Modal open={openProfileModal} handleCloseModal={handleCloseProfileModal}>
         <EditProfileForm user={user} onEditSuccess={handleEditProfileSuccess} />

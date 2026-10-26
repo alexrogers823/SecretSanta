@@ -45,7 +45,7 @@ const ProfilePictureInput = ({ file, existingUrl, onChange, onRemoveExisting }) 
         <Avatar src={shownUrl || undefined} alt="Profile picture preview" sx={{ width: 64, height: 64 }} />
         <Button component="label" size="small">
           {shownUrl ? "Change Photo" : "Choose Photo"}
-          <input hidden type="file" accept={PROFILE_PICTURE_TYPES.join(',')} onChange={handleFileSelected} />
+          <input hidden type="file" accept={[...PROFILE_PICTURE_TYPES, '.heic', '.heif'].join(',')} onChange={handleFileSelected} />
         </Button>
         {shownUrl && <Button size="small" color="error" onClick={handleRemove}>Remove</Button>}
       </Stack>

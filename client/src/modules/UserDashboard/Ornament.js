@@ -1,12 +1,12 @@
 import { Box as MuiBox } from '@mui/material';
 import React from 'react';
-import ornament from '../../assets/ornament.png';
+import { themeImageUrl } from '../../utils/assets';
 
 const Ornament = () => {
   return (
     <MuiBox
       component="img"
-      src={ornament}
+      src={themeImageUrl('ornament.webp')}
       alt="Alpha Phi Alpha Fraternity, Inc. 1906 Christmas ornament"
       sx={{
         display: 'block',

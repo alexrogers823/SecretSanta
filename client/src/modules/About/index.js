@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../../api/client';
 
 const About = () => {
   const [message, setMessage] = useState("");
@@ -6,12 +7,7 @@ const About = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch("http://localhost:8000/api/about")
-        if (!response.ok) {
-          throw new Error('Network response failed');
-        }
-        const textData = await response.text();
-        setMessage(textData);
+        setMessage(await apiFetch("/api/about"));
       } catch (error) {
         console.error('Error fetching data:', error)
       }

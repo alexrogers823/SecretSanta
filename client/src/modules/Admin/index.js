@@ -2,6 +2,7 @@ import Container from '@mui/material/Container'
 import { Paper, Stack, Typography } from '@mui/material'
 import { useEffect, useState } from "react"
 import { Navigate } from "react-router-dom"
+import { apiFetch, getErrorMessage } from '../../api/client'
 import { Button, Modal } from '../../common'
 import { isAdmin, useAuth } from '../../context/AuthContext'
 import { getFullName } from '../../utils/userHelpers'
@@ -12,51 +13,31 @@ import UserTable from './UserTable'
 const EMPTY_USER = { id: null, first_name: '', last_name: '', email: '', address: '' }
 
 const AdminPage = () => {
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
   const [users, setUsers] = useState([])
   const [editingUser, setEditingUser] = useState(null)
   const [deletingUser, setDeletingUser] = useState(null)
   const [confirmingRegenerate, setConfirmingRegenerate] = useState(false)
   const [regenerateError, setRegenerateError] = useState("")
+  const [notice, setNotice] = useState("")
 
   useEffect(() => {
     if (!isAdmin(user)) return
 
-    const fetchUsersAndGifts = async () => {
+    const fetchOverview = async () => {
       try {
-        const [usersResponse, matchesResponse] = await Promise.all([
-          fetch('http://localhost:8000/api/users'),
-          fetch('http://localhost:8000/api/matches'),
-        ])
-        if (!usersResponse.ok) return
-        const fetchedUsers = await usersResponse.json()
-        const matches = matchesResponse.ok ? await matchesResponse.json() : []
-        const assignedToByUserId = Object.fromEntries(
-          matches.map(match => [match.user_id, match.assigned_to])
-        )
-
-        const usersWithGifts = await Promise.all(
-          fetchedUsers.map(async fetchedUser => {
-            try {
-              const giftsResponse = await fetch(`http://localhost:8000/api/users/${fetchedUser.id}/gifts`)
-              const gifts = giftsResponse.ok ? await giftsResponse.json() : []
-              return { ...fetchedUser, gifts, assignedTo: assignedToByUserId[fetchedUser.id] || null }
-            } catch (error) {
-              console.error('Error fetching gifts:', error)
-              return { ...fetchedUser, gifts: [], assignedTo: assignedToByUserId[fetchedUser.id] || null }
-            }
-          })
-        )
-
-        setUsers(usersWithGifts)
+        // Users with their gifts, matches and photo counts, in one call
+        const overview = await apiFetch('/api/admin/overview')
+        setUsers(overview.users)
       } catch (error) {
         console.error('Error fetching users:', error)
       }
     }
 
-    fetchUsersAndGifts()
+    fetchOverview()
   }, [user])
 
+  if (loading) return null
   if (!isAdmin(user)) {
     return <Navigate to="/" replace />
   }
@@ -70,12 +51,10 @@ const AdminPage = () => {
 
   const handleConfirmDelete = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/api/users/${deletingUser.id}`, {
-        method: "DELETE",
-      })
-      if (response.ok) {
-        setUsers(current => current.filter(existing => existing.id !== deletingUser.id))
-      }
+      const data = await apiFetch(`/api/users/${deletingUser.id}`, { method: "DELETE" })
+      setUsers(current => current.filter(existing => existing.id !== deletingUser.id))
+      // Set when matches were already drawn: someone has lost their match until you regenerate
+      setNotice(data.warning || "")
     } catch (error) {
       console.error('Error deleting user:', error)
     } finally {
@@ -85,25 +64,19 @@ const AdminPage = () => {
 
   const handleConfirmRegenerate = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/matches/regenerate', { method: "POST" })
-      const data = await response.json()
-
-      if (!response.ok) {
-        setRegenerateError(data.error || "Unable to regenerate matches.")
-        return
-      }
-
+      const matches = await apiFetch('/api/matches/regenerate', { method: "POST" })
       const assignedToByUserId = Object.fromEntries(
-        data.map(match => [match.user_id, match.assigned_to])
+        matches.map(match => [match.user_id, match.assigned_to])
       )
       setUsers(current => current.map(existing => (
-        { ...existing, assignedTo: assignedToByUserId[existing.id] || null }
+        { ...existing, assigned_to: assignedToByUserId[existing.id] || null }
       )))
       setRegenerateError("")
+      setNotice("")
       setConfirmingRegenerate(false)
     } catch (error) {
       console.error('Error regenerating matches:', error)
-      setRegenerateError("Something went wrong. Please try again.")
+      setRegenerateError(getErrorMessage(error, "Unable to regenerate matches."))
     }
   }
 
@@ -121,6 +94,7 @@ const AdminPage = () => {
             Regenerate Matches
           </Button>
         </Stack>
+        {notice && <Typography variant="body2" color="error" gutterBottom>{notice}</Typography>}
         <UserTable
           users={users}
           onEdit={setEditingUser}

@@ -12,14 +12,9 @@ const getNextOccurrenceUTC = (month, day, estHour) => {
   return new Date(targetUTC <= now ? buildEstUTC(year + 1, month, day, estHour) : targetUTC)
 }
 
-// November 25th, 12:00pm EST (month is 0-indexed)
+// November 25th, 12:00pm EST (month is 0-indexed). For display only: the server's
+// config/season.revealAt decides when matches are actually revealed.
 export const getNextMatchDate = () => getNextOccurrenceUTC(10, 25, 12)
-
-// True from this year's match reveal until the end of the year, when the countdown starts over
-export const isMatchRevealed = () => {
-  const now = new Date()
-  return now.getTime() >= buildEstUTC(now.getUTCFullYear(), 10, 25, 12)
-}
 
 // December 25th, 12:00am EST
 export const getNextChristmasDate = () => getNextOccurrenceUTC(11, 25, 0)

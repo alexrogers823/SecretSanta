@@ -1,5 +1,6 @@
 import { TextField, Typography } from "@mui/material"
 import { useState } from "react"
+import { apiFetch, getErrorMessage } from "../api/client"
 import { Form } from "../common"
 import { removeProfilePicture, uploadProfilePicture } from "../utils/profilePicture"
 import ProfilePictureInput from "./ProfilePictureInput"
@@ -9,26 +10,14 @@ const EditProfileForm = ({ user, onEditSuccess }) => {
   const [profilePicture, setProfilePicture] = useState(null)
   const [removeExistingPicture, setRemoveExistingPicture] = useState(false)
 
-  const handleEditSubmit = async ({ first_name, last_name, email, address }) => {
-    if (!first_name?.trim() || !last_name?.trim() || !email?.trim() || !address?.trim()) {
-      setError("First name, last name, email, and address are required.")
+  const handleEditSubmit = async ({ first_name, last_name, address }) => {
+    if (!first_name?.trim() || !last_name?.trim() || !address?.trim()) {
+      setError("First name, last name, and address are required.")
       return
     }
 
     try {
-      const response = await fetch(`http://localhost:8000/api/users/${user.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ first_name, last_name, email, address }),
-      })
-      const data = await response.json()
-
-      if (!response.ok) {
-        setError(data.error || "Something went wrong. Please try again.")
-        return
-      }
-
-      let updatedUser = data
+      let updatedUser = await apiFetch("/api/me", { method: "PATCH", body: { first_name, last_name, address } })
       if (profilePicture) {
         updatedUser = await uploadProfilePicture(user.id, profilePicture)
       } else if (removeExistingPicture && user.profile_picture_url) {
@@ -39,7 +28,7 @@ const EditProfileForm = ({ user, onEditSuccess }) => {
       onEditSuccess?.(updatedUser)
     } catch (error) {
       console.error('Error updating profile:', error)
-      setError("Something went wrong. Please try again.")
+      setError(getErrorMessage(error))
     }
   }
 
@@ -52,7 +41,8 @@ const EditProfileForm = ({ user, onEditSuccess }) => {
     >
       <TextField id="first_name" label="First Name" variant="standard" defaultValue={user.first_name} required />
       <TextField id="last_name" label="Last Name" variant="standard" defaultValue={user.last_name || ''} required />
-      <TextField id="email" label="Email" variant="standard" defaultValue={user.email} required />
+      {/* The email is the one you sign in with, so it can't be changed here */}
+      <TextField id="email" label="Email" variant="standard" defaultValue={user.email} slotProps={{ input: { readOnly: true } }} />
       <TextField id="address" label="Address" variant="standard" defaultValue={user.address} multiline required fullWidth />
       <ProfilePictureInput
         file={profilePicture}

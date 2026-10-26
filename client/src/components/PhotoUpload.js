@@ -1,7 +1,8 @@
 import { Alert, CircularProgress, Box as MuiBox, Stack } from '@mui/material';
 import React, { useEffect, useState } from 'react';
 import { Button, PromptCard } from '../common';
-import { uploadPhotos } from '../utils/photoUpload';
+import { getErrorMessage } from '../api/client';
+import { PHOTO_TYPES, PhotoValidationError, uploadPhotos } from '../utils/photoUpload';
 
 const PhotoUpload = () => {
   const [uploading, setUploading] = useState(false)
@@ -17,19 +18,16 @@ const PhotoUpload = () => {
     e.target.value = ""
     if (files.length === 0) return
 
-    const images = files.filter(file => file.type.startsWith('image/'))
-    if (images.length !== files.length) {
-      setError("Only image files can be uploaded")
-      return
-    }
-
     setError("")
     setUploading(true)
     try {
-      const results = await uploadPhotos(images)
-      setUploaded(results.map((result, index) => ({ ...result, previewUrl: URL.createObjectURL(images[index]) })))
+      const results = await uploadPhotos(files)
+      // Previews come from the user's own files, so they're safe to show before processing finishes
+      setUploaded(results.map((result, index) => ({ ...result, previewUrl: URL.createObjectURL(files[index]) })))
     } catch (err) {
-      setError("Upload failed, please try again")
+      console.error('Error uploading photos:', err)
+      // Show size/type problems and server limits (e.g. 25 photos per season) as they are
+      setError(err instanceof PhotoValidationError ? err.message : getErrorMessage(err, "Upload failed, please try again"))
     } finally {
       setUploading(false)
     }
@@ -44,13 +42,13 @@ const PhotoUpload = () => {
         startIcon={uploading ? <CircularProgress size={16} color="inherit" /> : null}
       >
         {uploading ? "Uploading..." : "Upload"}
-        <input hidden type="file" accept="image/*" multiple onChange={handleFilesSelected} />
+        <input hidden type="file" accept={[...PHOTO_TYPES, '.heic', '.heif'].join(',')} multiple onChange={handleFilesSelected} />
       </Button>
       {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
       {uploaded.length > 0 && (
         <>
           <Alert severity="success" sx={{ mt: 2 }}>
-            {`Uploaded ${uploaded.length} photo${uploaded.length === 1 ? "" : "s"} successfully!`}
+            {`Uploaded ${uploaded.length} photo${uploaded.length === 1 ? "" : "s"}! ${uploaded.length === 1 ? "It" : "They"}'ll appear in the gallery shortly.`}
           </Alert>
           <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap" useFlexGap sx={{ mt: 2 }}>
             {uploaded.map(photo => (

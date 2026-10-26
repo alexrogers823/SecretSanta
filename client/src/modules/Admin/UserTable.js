@@ -49,11 +49,11 @@ const UserTable = ({ users, onEdit, onDelete, currentAdminEmail }) => {
                 <TableCell>{user.address}</TableCell>
                 <TableCell>{giftSummary}</TableCell>
                 <TableCell>
-                  {!user.assignedTo
+                  {!user.assigned_to
                     ? "Not generated"
                     : (
                       <Button size="small" onClick={() => toggleRevealed(user.id)}>
-                        {isRevealed ? getFullName(user.assignedTo) : "Reveal"}
+                        {isRevealed ? getFullName(user.assigned_to) : "Reveal"}
                       </Button>
                     )
                   }

@@ -1,5 +1,6 @@
 import { TextField, Typography } from "@mui/material"
 import { useState } from "react"
+import { apiFetch, getErrorMessage } from "../../api/client"
 import { Form } from "../../common"
 import { getFullName } from "../../utils/userHelpers"
 
@@ -13,22 +14,15 @@ const EditUserForm = ({ user, onEditSuccess }) => {
     }
 
     try {
-      const response = await fetch(`http://localhost:8000/api/users/${user.id}`, {
+      const data = await apiFetch(`/api/users/${user.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ first_name, last_name, email, address }),
+        body: { first_name, last_name, email, address },
       })
-      const data = await response.json()
-
-      if (response.ok) {
-        setError("")
-        onEditSuccess?.(data)
-      } else {
-        setError(data.error || "Something went wrong. Please try again.")
-      }
+      setError("")
+      onEditSuccess?.(data)
     } catch (error) {
       console.error('Error updating user:', error)
-      setError("Something went wrong. Please try again.")
+      setError(getErrorMessage(error))
     }
   }
 

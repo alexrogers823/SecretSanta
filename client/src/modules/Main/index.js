@@ -1,32 +1,14 @@
 import { Grid, Stack } from '@mui/material';
 import Container from '@mui/material/Container';
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Button, PromptCard } from '../../common';
-import { DashboardPrompt, PhotoUpload } from '../../components';
+import { DashboardPrompt, PhotoGallery, PhotoUpload } from '../../components';
 import { useAuth } from '../../context/AuthContext';
 import { useAuthModal } from '../../context/AuthModalContext';
 
 const Main = () => {
   const { user } = useAuth()
   const { openLogin, openSignup } = useAuthModal()
-  const [message, setMessage] = useState({})
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const response = await fetch("http://localhost:8000/api")
-        if (!response.ok) {
-          throw new Error('Network response failed');
-        }
-        const jsonData = await response.json();
-        setMessage(jsonData);
-      } catch (error) {
-        console.error('Error fetching data:', error)
-      }
-    }
-
-    fetchData();
-  }, []);
 
   return (
     <Container maxWidth="md" sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -55,6 +37,9 @@ const Main = () => {
                   <PromptCard message="Sign up and join your LBs in the fun!">
                     <Button variant="contained" onClick={openSignup}>Sign Up</Button>
                   </PromptCard>
+                </Grid>
+                <Grid item xs={12}>
+                  <PhotoGallery />
                 </Grid>
               </>
             )

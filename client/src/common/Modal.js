@@ -11,7 +11,8 @@ const Modal = (props) => {
       aria-labelledby="modal-modal-title"
       aria-describedby="modal-modal-description"
     >
-      {props.children}
+      {/* MUI moves focus into the modal through a ref, which function components like the forms can't hold */}
+      <div style={{ outline: 'none' }}>{props.children}</div>
     </MuiModal>
   )
 }

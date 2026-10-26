@@ -1,6 +1,6 @@
 import { Box as MuiBox } from '@mui/material';
 import React from 'react';
-import christmasTree from '../../assets/christmas-tree.png';
+import { themeImageUrl } from '../../utils/assets';
 
 const OLD_GOLD = '#cfb53b'
 const BLACK = '#000000'
@@ -19,7 +19,7 @@ const ChristmasTree = () => {
     >
       <MuiBox
         component="img"
-        src={christmasTree}
+        src={themeImageUrl('christmas-tree.webp')}
         alt="Christmas tree decorated in old gold and black Alpha Phi Alpha ornaments"
         sx={{
           display: 'block',

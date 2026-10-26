@@ -1,20 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, PromptCard } from '../common';
-import { isMatchRevealed } from '../utils/dateHelpers';
+import useMatch from '../hooks/useMatch';
 
 const DashboardPrompt = ({ user }) => {
   const navigate = useNavigate()
-  const [revealed, setRevealed] = useState(isMatchRevealed)
-
-  useEffect(() => {
-    const intervalId = setInterval(() => setRevealed(isMatchRevealed()), 1000)
-    return () => clearInterval(intervalId)
-  }, [])
+  // Same server flag as the dashboard, so the two can't disagree
+  const { match } = useMatch()
 
   return (
     <PromptCard
-      message={revealed
+      message={match?.revealed
         ? `It's here ${user.first_name}! Check who your person is`
         : `${user.first_name}, add your information and gift requests before the reveal date`}
     >
