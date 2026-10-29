@@ -118,7 +118,7 @@ All of these live in a new `functions/` folder and deploy with `gcloud functions
 
 | **F7** | `process_profile_picture` | Cloud Storage `object.finalized` on the **profile-pictures** bucket | Same safety steps as F6, using the same shared image code: ignore objects outside `uploads/`, verify the image, **strip EXIF/GPS**, fix rotation. Center-crop to a square, resize to 512 px WebP at `avatars/{uid}/{pictureId}.webp`, delete the original and the user's previous avatar, then set `users/{uid}.profilePicturePath`. **Idempotent:** skips if `profilePicturePath` already points at this picture. | **New**, for profile pictures. A second deploy of the same code would also work, but a separate entry point keeps the square crop and the "replace previous avatar" step out of F6. |
 
-Scheduler job count: **F1, F4 (also handling F5), and one spare**, which keeps you inside the 3 free jobs. F6 and F7 are event-triggered, so they don't use Scheduler jobs.
+Scheduler job count: **three jobs**: F1, F4 and F5 (the last two both run the `gift_reminder` function), which keeps you inside the 3 free jobs. F6 and F7 are event-triggered, so they don't use Scheduler jobs.
 
 ---
 
@@ -275,13 +275,101 @@ Why it's shaped this way:
    - Parse the photo ID from the object path and load `photos/{id}`. If the document is missing, delete the object (an upload nobody asked for).
    - Open the image with Pillow and apply `ImageOps.exif_transpose`. Re-save **without** EXIF, which removes GPS location, camera details and timestamps. Write `display/…` (max 1600 px) and `thumbs/…` (400 px) as WebP with `Cache-Control: private, max-age=3600`.
    - Delete the original upload, then set `status: "ready"`, the two paths and `processedAt`. If Pillow can't open the file, delete it and set `status: "rejected"`.
-6. Deploy, for example:
-   - `gcloud functions deploy generate_matches --gen2 --region=us-east1 --runtime=python312 --trigger-topic=season-events --entry-point=generate_matches`
-   - `gcloud functions deploy notify_match --gen2 --region=us-east1 --runtime=python312 --trigger-event-filters=type=google.cloud.firestore.document.v1.created --trigger-event-filters=database='secret-santa-database' --trigger-event-filters-path-pattern=document='seasons/{year}/assignments/{giver}' --entry-point=notify_match --set-secrets=SMTP_PASSWORD=smtp-password:latest`
-   - `gcloud functions deploy process_profile_picture --gen2 --region=us-east1 --runtime=python312 --trigger-bucket=secret-santa-profile-photos --entry-point=process_profile_picture --memory=512Mi --service-account=secret-santa-fns@secret-santa-511801.iam.gserviceaccount.com`
-   - `gcloud functions deploy process_photo --gen2 --region=us-east1 --runtime=python312 --trigger-bucket=secret-santa-photos --entry-point=process_photo --memory=512Mi --service-account=secret-santa-fns@secret-santa-511801.iam.gserviceaccount.com` (decoding a 12-megapixel phone photo needs more than the default 256 MiB).
-7. Create the Scheduler jobs with `--time-zone="America/New_York"` publishing to `season-events` with a `{"action": "..."}` payload.
-8. Give the functions' and Cloud Run's service accounts only `roles/datastore.user`, plus `roles/storage.objectAdmin` on the photos and profile-pictures buckets (Phase 0, step 9) and `roles/secretmanager.secretAccessor` where needed. Don't use the broad default Editor account.
+**Steps 1–5 status (2026-10-28): done.** Where the code differs from the steps above:
+- **`functions/mailer.py`, not `email.py`:** a module named `email` hides Python's own `email` package, which `smtplib` imports. It sends as `SMTP_USER` (the Gmail address the app password belongs to).
+- **Files:** `main.py` (entry points), `store.py` (Firestore/Storage clients, season lookup, `run_once`), `images.py` (shared Pillow code for F6/F7), `messages.py` (email wording), `mailer.py`. Dependencies are managed with pipenv like `flask_server/` (`pipenv requirements > requirements.txt`); no Secret Manager library is needed because the password is mounted with `--set-secrets`.
+- **Idempotency:** besides the per-document checks (`notifiedAt`, photo `status`, `profilePicturePath`), every event is claimed once by its event ID in a `functionEvents` collection; if the handler fails, the claim is released so a retry runs again. Gift reminders are claimed per person, so a retry never emails anyone twice. Optionally clean old claims with a TTL policy: `gcloud firestore fields ttls update expireAt --collection-group=functionEvents --enable-ttl --database=secret-santa-database`.
+- **Firestore triggers** read the document path from the event and fetch the document fresh, so no protobuf decoding (`google-events`) is needed.
+- **Location data:** F6/F7 strip **EXIF and XMP** (phones can store GPS in either) and keep only the color profile. Images over 60 megapixels are refused.
+- **F1** also sets `config/season.status = "matched"`, and emails the admin if fewer than 2 members signed up or every draw repeats last year. **F2** says "matches were redrawn" when `generation > 1`, and before the reveal time says when the match can be seen. **F4** handles both `gift_reminder` and `close_season` (F5).
+
+6. Deploy. Run `scripts/sync_shared.sh` first (it copies `shared/` into `functions/`), deploy from the repo root, then delete `functions/shared/`.
+   - **Before the first deploy:** enable the Eventarc API (`gcloud services enable eventarc.googleapis.com`), create the Pub/Sub and Eventarc service agents (`gcloud beta services identity create --service=pubsub.googleapis.com`, then the same with `eventarc.googleapis.com`), grant the Pub/Sub agent `roles/iam.serviceAccountTokenCreator`, and do step 8's grants for `secret-santa-fns`. Google creates service agents lazily, so they may not exist yet even with the APIs enabled.
+   - The shared flags go in **arrays**, which work in both zsh (the macOS default) and bash. A plain string variable doesn't: zsh passes `$COMMON` to gcloud as one argument, which fails with "unrecognized arguments".
+   - Replace the two emails. `ADMIN_EMAILS` gets questions and draw problems. `SMTP_USER` is the Gmail address the `smtp-password` app password belongs to. Functions don't read `flask_server/.env`, so these must be set here.
+   ```bash
+   FNS=secret-santa-fns@secret-santa-511801.iam.gserviceaccount.com
+   COMMON=(
+     --gen2 --region=us-east1 --runtime=python312 --source=functions
+     --service-account=$FNS --trigger-service-account=$FNS
+     --set-env-vars=FIRESTORE_DATABASE=secret-santa-database,SITE_URL=https://secret-santa-511801.web.app,ADMIN_EMAILS=YOUR_ADMIN_EMAIL,SMTP_USER=YOUR_GMAIL
+   )
+   MAIL=(--set-secrets=SMTP_PASSWORD=smtp-password:latest)
+   FIRESTORE_CREATED=(
+     --trigger-location=us-east1
+     --trigger-event-filters=type=google.cloud.firestore.document.v1.created
+     --trigger-event-filters=database=secret-santa-database
+   )
+
+   gcloud functions deploy generate_matches "${COMMON[@]}" "${MAIL[@]}" --entry-point=generate_matches --trigger-topic=season-events
+   gcloud functions deploy gift_reminder "${COMMON[@]}" "${MAIL[@]}" --entry-point=gift_reminder --trigger-topic=season-events
+   gcloud functions deploy notify_match "${COMMON[@]}" "${MAIL[@]}" "${FIRESTORE_CREATED[@]}" \
+     --entry-point=notify_match --trigger-event-filters-path-pattern='document=seasons/{year}/assignments/{giver}'
+   gcloud functions deploy notify_admin_question "${COMMON[@]}" "${MAIL[@]}" "${FIRESTORE_CREATED[@]}" \
+     --entry-point=notify_admin_question --trigger-event-filters-path-pattern='document=questions/{question}'
+   # Decoding a 12-megapixel phone photo needs more than the default 256 MiB
+   gcloud functions deploy process_photo "${COMMON[@]}" --entry-point=process_photo --trigger-bucket=secret-santa-photos --memory=512Mi
+   gcloud functions deploy process_profile_picture "${COMMON[@]}" --entry-point=process_profile_picture --trigger-bucket=secret-santa-profile-photos --memory=512Mi
+   ```
+   - The path patterns are in single quotes so zsh doesn't treat `{year}` and `{giver}` as special characters.
+   - Both Pub/Sub functions receive every `season-events` message and act only on their own `action`s.
+7. Create the three Scheduler jobs (Cloud Scheduler's free tier covers 3 jobs per billing account). Each publishes `{"action": ...}` to `season-events`, and the function that handles that action runs. Schedules and message bodies are single-quoted so zsh passes `*`, `{` and `"` through untouched.
+   ```bash
+   SCHEDULE=(--location=us-east1 --time-zone=America/New_York --topic=season-events)
+
+   # F1: draw matches on Nov 25 at 12:00pm Eastern (the same moment as config/season.revealAt)
+   gcloud scheduler jobs create pubsub generate-matches "${SCHEDULE[@]}" \
+     --schedule='0 12 25 11 *' \
+     --message-body='{"action": "generate_matches"}' \
+     --description="Draw Secret Santa matches at the reveal time"
+
+   # F4: wish-list reminders on Nov 15 and Nov 22 at 10:00am Eastern
+   gcloud scheduler jobs create pubsub gift-reminder "${SCHEDULE[@]}" \
+     --schedule='0 10 15,22 11 *' \
+     --message-body='{"action": "gift_reminder"}' \
+     --description="Remind members with an empty wish list"
+
+   # F5 (handled by gift_reminder): close the season on Jan 15 at 9:00am Eastern
+   gcloud scheduler jobs create pubsub close-season "${SCHEDULE[@]}" \
+     --schedule='0 9 15 1 *' \
+     --message-body='{"action": "close_season"}' \
+     --description="Mark the Secret Santa season closed"
+   ```
+   - Check them with `gcloud scheduler jobs list --location=us-east1`. **Don't `gcloud scheduler jobs run` them to test:** that runs against the real database right away (drawing matches and emailing everyone, emailing reminders, or closing the season). Test as described in Phase 5, step 2.
+8. Give each service account only the roles it needs. Don't use the default Compute Engine account, which has the broad Editor role. Running a grant again is harmless.
+
+   | Account | Role | Granted on | Why |
+   |---|---|---|---|
+   | `secret-santa-fns` (functions) | `datastore.user` | project | read and write Firestore |
+   | | `eventarc.eventReceiver` | project | receive Pub/Sub, Firestore and Storage trigger events |
+   | | `run.invoker` | project | let the triggers (which run as this account) call the functions |
+   | | `secretmanager.secretAccessor` | the `smtp-password` secret | read the Gmail app password |
+   | | `storage.objectAdmin` | both private buckets | process uploads (Phase 0, step 9) |
+   | `secret-santa-api` (Cloud Run) | `datastore.user` | project | read and write Firestore |
+   | | `firebaseauth.admin` | project | delete a user's sign-in account when the admin deletes them (`auth.delete_user`) |
+   | | `storage.objectAdmin` | both private buckets | sign URLs and delete photos (Phase 0, step 9) |
+   | | `iam.serviceAccountTokenCreator` | **itself only** | sign URLs without a key file (Phase 0, step 9) |
+
+   ```bash
+   P=secret-santa-511801
+   # Plain emails, like step 6; IAM commands add the serviceAccount: prefix themselves below
+   API=secret-santa-api@$P.iam.gserviceaccount.com
+   FNS=secret-santa-fns@$P.iam.gserviceaccount.com
+
+   # secret-santa-fns
+   gcloud projects add-iam-policy-binding $P --member=serviceAccount:$FNS --role=roles/datastore.user
+   gcloud projects add-iam-policy-binding $P --member=serviceAccount:$FNS --role=roles/eventarc.eventReceiver
+   gcloud projects add-iam-policy-binding $P --member=serviceAccount:$FNS --role=roles/run.invoker
+   gcloud secrets add-iam-policy-binding smtp-password --project=$P --member=serviceAccount:$FNS --role=roles/secretmanager.secretAccessor
+
+   # secret-santa-api
+   gcloud projects add-iam-policy-binding $P --member=serviceAccount:$API --role=roles/datastore.user
+   gcloud projects add-iam-policy-binding $P --member=serviceAccount:$API --role=roles/firebaseauth.admin
+   ```
+   - **Token Creator belongs on `secret-santa-api` itself, never on the project.** At the project level it would let the API act as *every* service account, including the Editor-level default one. If it was granted project-wide, remove it (the grant on itself stays):
+     `gcloud projects remove-iam-policy-binding $P --member=serviceAccount:$API --role=roles/iam.serviceAccountTokenCreator`
+   - If gcloud says members must be of the form `<type>:<value>`, the `serviceAccount:` prefix is missing (e.g. `$FNS` or `$API` is empty in this terminal).
+   - Check the result with `gcloud projects get-iam-policy $P --flatten=bindings --filter="bindings.members:secret-santa-api@" --format="value(bindings.role)"` (and the same with `secret-santa-fns@`).
 
 ### Phase 4: Hosting, domain, and deploy
 1. At the `Secret_Santa/` root, add a `hosting` section to `firebase.json` (created in Phase 1's "Before you start"):
@@ -320,7 +408,7 @@ Secret_Santa/
 ├── firebase.json, .firebaserc, firestore.rules, photos-cors.json, photos-lifecycle.json
 ├── client/                  # React (unchanged structure + src/api, src/firebase.js, modules/Photos)
 ├── flask_server/            # Cloud Run API (Dockerfile, auth.py, repository.py, storage.py, profile_pictures.py, routes/)
-├── functions/               # Cloud Run functions (main.py incl. process_photo and process_profile_picture, email.py, requirements.txt)
+├── functions/               # Cloud Run functions (main.py, store.py, images.py, messages.py, mailer.py, requirements.txt)
 ├── shared/matching.py       # used by both flask_server and functions (copied in at build time)
 └── scripts/                 # seed_config.py, migrate_sqlite_to_firestore.py
 ```

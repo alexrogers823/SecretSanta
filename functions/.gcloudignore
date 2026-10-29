@@ -1,0 +1,10 @@
+# Only the function code, shared/ (copied in by scripts/sync_shared.sh) and requirements.txt are deployed
+.gcloudignore
+.gitignore
+Pipfile
+Pipfile.lock
+pytest.ini
+tests/
+__pycache__/
+*.pyc
+.pytest_cache/
