@@ -184,3 +184,38 @@ def test_account_deleted_during_processing_leaves_no_avatar(db, buckets, user, m
 
     main.process_profile_picture(storage_event(PICTURES, "uploads/ann/pic1"))
     assert pictures.objects == {}
+
+
+# Uploads that disappear mid-way (step 4: redeliveries and races must not fail)
+
+def test_pending_photo_whose_upload_is_already_gone_is_left_alone(db, buckets, pending_photo):
+    # E.g. a duplicate delivery racing the first one, which already deleted the original
+    main.process_photo(storage_event(PHOTOS, pending_photo))
+    assert db.data("photos/p1")["status"] == "pending"
+    assert buckets(PHOTOS).objects == {}
+
+
+def test_unreadable_photo_whose_record_was_deleted_meanwhile_is_still_cleaned_up(db, buckets, pending_photo, monkeypatch):
+    photos = buckets(PHOTOS)
+    photos.blob(pending_photo).upload_from_string(b"not an image", "image/jpeg")
+    original_variants = main.images.photo_variants
+
+    def delete_then_fail(raw):
+        del db.docs["photos/p1"]
+        return original_variants(raw)
+    monkeypatch.setattr(main.images, "photo_variants", delete_then_fail)
+
+    main.process_photo(storage_event(PHOTOS, pending_photo))
+    assert photos.objects == {} and db.data("photos/p1") is None
+
+
+def test_profile_picture_whose_upload_is_already_gone_is_left_alone(db, buckets, user):
+    main.process_profile_picture(storage_event(PICTURES, "uploads/ann/pic1"))
+    assert db.data("users/ann")["profilePicturePath"] is None
+    assert buckets(PICTURES).objects == {}
+
+
+def test_profile_picture_update_also_stamps_updated_at(db, buckets, user):
+    buckets(PICTURES).blob("uploads/ann/pic1").upload_from_string(image_bytes(), "image/jpeg")
+    main.process_profile_picture(storage_event(PICTURES, "uploads/ann/pic1"))
+    assert db.data("users/ann")["updatedAt"]
