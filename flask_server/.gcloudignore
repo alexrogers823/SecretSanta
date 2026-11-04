@@ -1,13 +1,14 @@
+# What `gcloud run deploy --source flask_server` leaves out of the upload. Unlike .dockerignore
+# (which keeps files out of the image), the Dockerfile and .dockerignore must be uploaded:
+# Cloud Build needs them to build the image.
 .git
 .gitignore
+.gcloudignore
 __pycache__/
 *.pyc
 instance/
 .venv/
 .env
-Dockerfile
-.dockerignore
-.gcloudignore
 .env.example
 tests/
 pytest.ini

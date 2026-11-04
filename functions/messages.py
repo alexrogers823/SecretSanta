@@ -3,7 +3,7 @@ import os
 
 from store import EASTERN_STANDARD_TIME
 
-SITE_URL = os.environ.get("SITE_URL", "https://secret-santa-511801.web.app")
+SITE_URL = os.environ.get("SITE_URL", "https://repssecretsanta.com")
 
 
 def _reveal_text(reveal_at):

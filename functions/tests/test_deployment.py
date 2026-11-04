@@ -101,6 +101,12 @@ def test_common_flags_use_the_dedicated_service_account_and_named_database():
     assert f"--trigger-event-filters=database={store.DATABASE}" in DEPLOY_STEP
 
 
+def test_every_function_retries_failed_events():
+    # Safe because every handler is idempotent; without it a brief failure loses an email or the draw
+    common = DEPLOY_STEP[DEPLOY_STEP.index("COMMON=("):]
+    assert "--retry" in common[:common.index(")")]
+
+
 @pytest.mark.parametrize("name", ["generate_matches", "gift_reminder", "notify_match", "notify_admin_question"])
 def test_functions_that_email_get_the_smtp_password(name):
     assert '"${MAIL[@]}"' in deploy_command(name)

@@ -292,7 +292,8 @@ Why it's shaped this way:
    COMMON=(
      --gen2 --region=us-east1 --runtime=python312 --source=functions
      --service-account=$FNS --trigger-service-account=$FNS
-     --set-env-vars=FIRESTORE_DATABASE=secret-santa-database,SITE_URL=https://secret-santa-511801.web.app,ADMIN_EMAILS=YOUR_ADMIN_EMAIL,SMTP_USER=YOUR_GMAIL
+     --set-env-vars=FIRESTORE_DATABASE=secret-santa-database,SITE_URL=https://repssecretsanta.com,ADMIN_EMAILS=YOUR_ADMIN_EMAIL,SMTP_USER=YOUR_GMAIL
+     --retry
    )
    MAIL=(--set-secrets=SMTP_PASSWORD=smtp-password:latest)
    FIRESTORE_CREATED=(
@@ -312,6 +313,9 @@ Why it's shaped this way:
    gcloud functions deploy process_profile_picture "${COMMON[@]}" --entry-point=process_profile_picture --trigger-bucket=secret-santa-profile-photos --memory=512Mi
    ```
    - The path patterns are in single quotes so zsh doesn't treat `{year}` and `{giver}` as special characters.
+   - `--retry` redelivers an event when its function raises an error, with backoff, for up to 24 hours, so a brief Gmail or Firestore failure doesn't lose an email or the Nov 25 draw. That's safe because every handler is idempotent (step 4). A permanent problem, like a wrong app password, is retried too, so check the logs after deploying. To turn it off for one function, redeploy it with `--no-retry`.
+   - Rerunning a deploy command updates that function in place (a new revision, same triggers). `--set-env-vars` replaces the whole list, so always pass all four settings.
+   - Check the retry setting with `gcloud functions list --regions=us-east1 --format="table(name.basename(),eventTrigger.retryPolicy)"`: every function should show `RETRY_POLICY_RETRY`.
    - Both Pub/Sub functions receive every `season-events` message and act only on their own `action`s.
 7. Create the three Scheduler jobs (Cloud Scheduler's free tier covers 3 jobs per billing account). Each publishes `{"action": ...}` to `season-events`, and the function that handles that action runs. Schedules and message bodies are single-quoted so zsh passes `*`, `{` and `"` through untouched.
    ```bash
@@ -372,16 +376,68 @@ Why it's shaped this way:
    - Check the result with `gcloud projects get-iam-policy $P --flatten=bindings --filter="bindings.members:secret-santa-api@" --format="value(bindings.role)"` (and the same with `secret-santa-fns@`).
 
 ### Phase 4: Hosting, domain, and deploy
-1. At the `Secret_Santa/` root, add a `hosting` section to `firebase.json` (created in Phase 1's "Before you start"):
-   - `hosting.public: "client/build"`
-   - `rewrites`: `{"source": "/api/**", "run": {"serviceId": "secret-santa-api", "region": "us-east1"}}`, then `{"source": "**", "destination": "/index.html"}` (SPA routing for `/dashboard/:id`, `/admin` and the new `/photos`)
-   - `headers`: long cache for `/static/**`, `no-cache` for `index.html`
-   - Check that `firestore.rules` denies all client reads and writes.
+1. At the `Secret_Santa/` root, add this `hosting` section to `firebase.json` (created in Phase 1's "Before you start"; its `firestore` and `emulators` sections stay as they are):
+   ```json
+   "hosting": {
+     "public": "client/build",
+     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+     "rewrites": [
+       { "source": "/api/**", "run": { "serviceId": "secret-santa-api", "region": "us-east1" } },
+       { "source": "**", "destination": "/index.html" }
+     ],
+     "headers": [
+       {
+         "source": "/static/**",
+         "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+       },
+       {
+         "regex": "^/([^.]*|index\\.html)$",
+         "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+       }
+     ]
+   }
+   ```
+   - **`/api/**`** goes to the Cloud Run service. `serviceId` must match the name deployed in step 2, and `region` is required (Firebase otherwise assumes `us-central1`). The rewrite only works once that service exists, so deploy the API before Hosting.
+   - **`**` → `/index.html`** is SPA routing for `/dashboard/:id`, `/admin` and `/photos`. Real files (like `/static/...`) are always served as themselves first.
+   - **Caching:** the hashed `/static/` files never change, so they're cached for a year. Every page route gets `no-cache`, so a deploy shows up immediately. Header rules are matched against the **original URL, before rewrites**, so a rule for `/index.html` alone would miss `/`, `/dashboard/...` and `/admin`. Those would keep Firebase's default 1-hour browser cache and could load a stale page pointing at JavaScript a deploy removed. The regex matches every path without a file extension, plus `/index.html`. The two rules never overlap, because Firebase doesn't document how overlapping rules combine. Verified in the Hosting emulator.
+   - Check that `firestore.rules` denies all client reads and writes (`allow read, write: if false`).
 2. Deploy the API: run `scripts/sync_shared.sh` first (it copies `shared/` into `flask_server/`, which the upload needs), then `gcloud run deploy secret-santa-api --source flask_server --region us-east1 --min-instances 0 --max-instances 2 --memory 256Mi --cpu 1 --service-account secret-santa-api@secret-santa-511801.iam.gserviceaccount.com --set-env-vars ADMIN_EMAILS=...,FIRESTORE_DATABASE=secret-santa-database,PHOTOS_BUCKET=secret-santa-photos,PROFILE_PICTURES_BUCKET=secret-santa-profile-photos`. Cloud Run can stay "allow unauthenticated" because the Flask layer checks the Firebase ID token on every protected route. Afterwards, delete `flask_server/shared/` so local runs use `../shared` instead of a stale copy.
-3. Set the **Artifact Registry cleanup policy** on the `cloud-run-source-deploy` and `gcf-artifacts` repositories: keep the 2 most recent images.
+3. Set the **Artifact Registry cleanup policy** on the `cloud-run-source-deploy` (API) and `gcf-artifacts` (functions) repositories, so old images don't slowly add storage charges. One policy file, `artifact-cleanup-policy.json` in the repo root, works for both:
+   ```json
+   [
+     {
+       "name": "keep-2-most-recent",
+       "action": { "type": "Keep" },
+       "mostRecentVersions": { "keepCount": 2 }
+     },
+     {
+       "name": "delete-older-images",
+       "action": { "type": "Delete" },
+       "condition": { "tagState": "any", "olderThan": "1d" }
+     }
+   ]
+   ```
+   ```bash
+   gcloud artifacts repositories set-cleanup-policies cloud-run-source-deploy \
+     --location=us-east1 --policy=artifact-cleanup-policy.json
+   gcloud artifacts repositories set-cleanup-policies gcf-artifacts \
+     --location=us-east1 --policy=artifact-cleanup-policy.json
+   ```
+   - **Keep always wins over Delete,** so the 2 newest images are never deleted and anything older than a day is. `olderThan: 1d` protects an image pushed by a deploy that's still in progress.
+   - **`keepCount` counts per package, not per repository:** `secret-santa-api` keeps 2, and in `gcf-artifacts` each function, and each function's build `cache` package, keeps its own 2. So a deploy can be rolled back one version, not further.
+   - **Without `--dry-run` the policy deletes for real.** Add `--dry-run` to only log what it would delete. Cleanup runs in the background about once a day, so the repositories don't shrink right away.
+   - Check with: `for r in cloud-run-source-deploy gcf-artifacts; do gcloud artifacts repositories describe $r --location=us-east1 --format="yaml(name.basename(),cleanupPolicies,cleanupPolicyDryRun)"; done`. Each should list both rules, with `cleanupPolicyDryRun` false or absent.
 4. Build and deploy the frontend: `cd client && npm run build && cd .. && firebase deploy --only hosting,firestore:rules`.
 5. Buy the domain. In Firebase Console → Hosting → "Add custom domain", add the TXT/A records it shows at your registrar. SSL is issued automatically, usually within an hour (allow up to 24h).
-6. Add the domain to **Firebase Auth → Authorized domains** (required for email-link sign-in), and add `https://yourdomain.com` (plus the `*.web.app` Hosting URL) to the **CORS policy of both the photos and profile-pictures buckets**, or browser uploads from the live site will be blocked.
+6. Point everything at the domain (`repssecretsanta.com`; `www` redirects to it):
+   - **Auth authorized domains** (required for email-link sign-in). This is in the **Firebase console**, not GCP: Authentication → **Settings** tab → **Authorized domains** → Add domain → `repssecretsanta.com`. `localhost`, `secret-santa-511801.web.app` and `secret-santa-511801.firebaseapp.com` are already listed by default.
+   - **Bucket CORS** (otherwise browser uploads from the live site are blocked). The GCP console doesn't show or edit CORS, so it's set from the command line. `photos-cors.json` lists `http://localhost:3000`, `https://repssecretsanta.com` and `https://secret-santa-511801.web.app`:
+     ```bash
+     gcloud storage buckets update gs://secret-santa-photos --cors-file=photos-cors.json
+     gcloud storage buckets update gs://secret-santa-profile-photos --cors-file=photos-cors.json
+     gcloud storage buckets describe gs://secret-santa-photos --format="json(cors_config)"   # check
+     ```
+   - **Email links.** The four emailing functions put `SITE_URL` in their emails, so it must be `https://repssecretsanta.com` (as in the Phase 3 step 6 commands). Redeploy `generate_matches`, `notify_match`, `notify_admin_question` and `gift_reminder` with the Phase 3 step 6 commands. Check with `gcloud functions describe notify_match --region=us-east1 --format="value(serviceConfig.environmentVariables.SITE_URL)"`.
 7. Optional: a `deploy.sh` (or GitHub Actions) that runs steps 2 and 4 in order.
 
 ### Phase 5: Before November
@@ -405,7 +461,7 @@ Why it's shaped this way:
 
 ```
 Secret_Santa/
-├── firebase.json, .firebaserc, firestore.rules, photos-cors.json, photos-lifecycle.json
+├── firebase.json, .firebaserc, firestore.rules, photos-cors.json, photos-lifecycle.json, artifact-cleanup-policy.json
 ├── client/                  # React (unchanged structure + src/api, src/firebase.js, modules/Photos)
 ├── flask_server/            # Cloud Run API (Dockerfile, auth.py, repository.py, storage.py, profile_pictures.py, routes/)
 ├── functions/               # Cloud Run functions (main.py, store.py, images.py, messages.py, mailer.py, requirements.txt)
