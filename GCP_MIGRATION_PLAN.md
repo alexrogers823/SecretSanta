@@ -441,8 +441,63 @@ Why it's shaped this way:
 7. Optional: a `deploy.sh` (or GitHub Actions) that runs steps 2 and 4 in order.
 
 ### Phase 5: Before November
-1. Seed `config/invites` with the 10 emails and `config/season` with `revealAt = 2026-11-25T12:00-05:00`.
-2. Run a full test in the emulators. Then, in production, temporarily set the Scheduler cron to a few minutes out with 2–3 test accounts. Confirm matches generate, emails send, and both the dashboard and the home page card switch to the revealed message. Then delete the test data and restore the real cron.
+1. Seed `config/invites` and `config/season` with `scripts/seed_config.py`.
+   - `config/invites` is the **sign-up allowlist**, so it needs each member's **real** email: the one they'll type on the sign-in page. Anyone whose email isn't listed (other than `ADMIN_EMAILS`) gets "this email hasn't been invited" when finishing sign-up. Matching ignores case, but the email must otherwise be exact, so check with anyone who has more than one address.
+   - Put the emails in `scripts/invites.txt`, one per line (`#` starts a comment). The file is gitignored.
+   - `config/season` gets `year` 2026 and `revealAt` 2026-11-25 12:00 Eastern (change with `--reveal`).
+   - It's a dry run unless you pass `--write`, and it only touches production with `--production`. It only adds emails; remove one in the Firestore console.
+   - **`PIPENV_DONT_LOAD_ENV=1` is required for production.** `pipenv run` loads `flask_server/.env`, which sets `FIRESTORE_EMULATOR_HOST`, and the Firebase SDK then sends every write to the emulator. The script refuses `--production` while that variable is set. The same applies to `migrate_sqlite_to_firestore.py --production`.
+   ```bash
+   cd flask_server
+   PIPENV_DONT_LOAD_ENV=1 pipenv run python ../scripts/seed_config.py --production           # check the list
+   PIPENV_DONT_LOAD_ENV=1 pipenv run python ../scripts/seed_config.py --production --write   # save it
+   ```
+2. Test a full season, first in the emulators, then in production. **No real member can be emailed:** in the emulators every email is only printed, and in production the functions run with a `MAIL_ALLOWLIST` of your test addresses.
+   - **How the mail settings work** (`functions/mailer.py`, both off in normal use):
+     - `MAIL_ALLOWLIST`: while set, mail goes only to these addresses (separated by `;`). Anyone else is skipped, and the log records how many, not who.
+     - `MAIL_MODE=log`: each email is logged instead of sent. The emulator script always sets it.
+
+   **a. Emulators.** The Firebase Functions emulator only runs `firebase-functions` code, not our `functions-framework` handlers. `scripts/emulator_season_test.py` calls the handlers itself with the same events Scheduler and Firestore send, against the Firestore emulator only.
+   1. Start everything, each in its own terminal:
+      ```bash
+      firebase emulators:start --only auth,firestore      # repo root
+      cd flask_server && pipenv run python server.py      # API on :8000
+      cd client && npm start                              # app on :3000
+      ```
+   2. Sign up 2–3 accounts at `http://localhost:3000`. Sign-in links appear in the emulator UI (Authentication tab) and terminal; nothing is emailed. They must be invited in the **emulator**: `cd flask_server && pipenv run python ../scripts/seed_config.py --write` (no `--production`: `.env` points it at the emulator). Add gifts for some of them.
+   3. Run the season from `functions/`, checking the app between commands:
+      ```bash
+      cd functions
+      pipenv run python ../scripts/emulator_season_test.py status
+      pipenv run python ../scripts/emulator_season_test.py reminders   # reminder text for members with no gifts
+      pipenv run python ../scripts/emulator_season_test.py draw        # matches + each giver's email, printed
+      pipenv run python ../scripts/emulator_season_test.py reveal      # reveal a minute ago: dashboard and home card show matches
+      pipenv run python ../scripts/emulator_season_test.py reset       # delete the matches, reveal back to Nov 25
+      ```
+      `add-users N` adds made-up members (Firestore only, they can't sign in) for a quick draw without signing up accounts.
+
+   **b. Production.** Use 2–3 plus-addresses of your own Gmail (e.g. `yourname+santa1@gmail.com`); they all arrive in your inbox.
+   1. Add the test addresses to `scripts/invites.txt` and run the seed script again (step 1).
+   2. Redeploy the four emailing functions (`generate_matches`, `notify_match`, `notify_admin_question`, `gift_reminder`) with the Phase 3 step 6 commands, adding the allowlist to the end of `COMMON`'s `--set-env-vars`, with `;` between addresses. **Quote that line:** unquoted, the shell treats `;` as the end of a command.
+      ```bash
+        "--set-env-vars=FIRESTORE_DATABASE=...,ADMIN_EMAILS=...,SMTP_USER=...,MAIL_ALLOWLIST=you@gmail.com;you+santa1@gmail.com;you+santa2@gmail.com"
+      ```
+      Check each one before going on: `gcloud functions describe notify_match --region=us-east1 --format="value(serviceConfig.environmentVariables.MAIL_ALLOWLIST)"`.
+   3. Sign up the test accounts on `https://repssecretsanta.com`, adding gifts to all but one.
+   4. **Run the jobs now instead of changing the cron.** `jobs run` fires a job immediately through the same Scheduler → Pub/Sub → function path, so there's no schedule to restore afterwards:
+      ```bash
+      gcloud scheduler jobs run gift-reminder --location=us-east1      # the account with no gifts gets a reminder
+      gcloud scheduler jobs run generate-matches --location=us-east1   # every test account gets a match email
+      gcloud functions logs read notify_match --region=us-east1 --limit=20
+      ```
+      Also submit an anonymous question to check `notify_admin_question` (step 5).
+   5. **Reveal:** from `flask_server/`, `PIPENV_DONT_LOAD_ENV=1 pipenv run python ../scripts/seed_config.py --production --write --reveal <a minute ago, e.g. 2026-11-08T14:00-05:00>`. Confirm the dashboard and the home page card switch to the revealed message.
+   6. **Clean up. The first item is critical:** if test matches stay in `seasons/2026`, the Nov 25 draw logs "Matches for 2026 already exist; nothing to do" and **the real draw never happens**.
+      - Firestore console: delete the `seasons/2026` document **with its `assignments` subcollection**, and delete the `status` field of `config/season`.
+      - Put the reveal back: run the seed script with `--production --write` and no `--reveal`.
+      - Delete the test accounts as admin in the app (removes their data), then in Firebase console → Authentication.
+      - Remove the test addresses from `config/invites` (Firestore console) and `scripts/invites.txt`.
+      - Redeploy the four emailing functions **without** `MAIL_ALLOWLIST`, and check that `describe` now prints nothing for it. While it's set, real members get no emails at all.
 3. Test photo uploads in production with a test account:
    - Upload a phone photo that has GPS data. Confirm the display copy and thumbnail have **no EXIF/GPS** (e.g. `exiftool`) and that the original under `uploads/` is gone.
    - Confirm a non-image renamed to `.jpg`, a file over 15 MB and the 26th photo are all rejected.
@@ -451,7 +506,7 @@ Why it's shaped this way:
    - Delete the test photos.
 4. Test profile pictures: sign up a test account with a phone photo, confirm the stored avatar is a square WebP with no EXIF/GPS, and that replacing it deletes the old one. Confirm the picture appears on that user's own dashboard, appears for their giver **only after the reveal**, and that every other account gets `profile_picture_url: null`. Remove it and confirm the full name shows instead.
 5. Test anonymous questions: submit one from a test account. Confirm the Firestore document and F3's email contain only the text, the admin screen shows no name or email, and Cloud Logging has no entry for that `POST /api/questions`.
-6. Test matching exclusions in the emulator: seed a `seasons/2025/assignments` set and a `seasons/2024` set, generate 2026, and confirm no 2025 pair repeats while 2024 pairs are allowed.
+6. Test matching exclusions in the emulator: from `functions/`, `pipenv run python ../scripts/emulator_season_test.py exclusions` (needs 3+ members; `add-users 3` adds them). It seeds 2025 and 2024 matches as two different cycles, draws 2026, and checks that no 2025 pair repeats while 2024 pairs are allowed. Run `reset` afterwards.
 7. Check that the photos bucket's lifecycle rules (Phase 0, step 13) are in place: `gcloud storage buckets describe gs://secret-santa-photos --format="default(lifecycle_config)"`.
 8. Check that the billing budget alert is active.
 
@@ -466,7 +521,7 @@ Secret_Santa/
 ├── flask_server/            # Cloud Run API (Dockerfile, auth.py, repository.py, storage.py, profile_pictures.py, routes/)
 ├── functions/               # Cloud Run functions (main.py, store.py, images.py, messages.py, mailer.py, requirements.txt)
 ├── shared/matching.py       # used by both flask_server and functions (copied in at build time)
-└── scripts/                 # seed_config.py, migrate_sqlite_to_firestore.py
+└── scripts/                 # seed_config.py, emulator_season_test.py, migrate_sqlite_to_firestore.py, sync_shared.sh
 ```
 The two inner repos were merged into one `Secret_Santa` repo on 2026-10-23 (GitHub `SecretSanta`, both histories kept), so deploy config, functions and shared code are versioned together.
 

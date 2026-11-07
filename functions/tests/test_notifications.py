@@ -197,3 +197,56 @@ def test_mailer_explains_missing_configuration(monkeypatch):
 def test_mailer_module_does_not_shadow_the_standard_library():
     import email.message
     assert email.message.__file__ != mailer.__file__
+
+
+# Test settings (Phase 5 step 2)
+
+@pytest.fixture
+def smtp(monkeypatch):
+    monkeypatch.setenv("SMTP_USER", "santa@gmail.com")
+    monkeypatch.setenv("SMTP_PASSWORD", "app-password")
+    monkeypatch.delenv("MAIL_ALLOWLIST", raising=False)
+    monkeypatch.delenv("MAIL_MODE", raising=False)
+    monkeypatch.setattr(mailer.smtplib, "SMTP", FakeSMTP)
+    FakeSMTP.instances.clear()
+    return FakeSMTP.instances
+
+
+def sent_to(instances):
+    return [smtp.calls[2][1]["To"] for smtp in instances]
+
+
+@pytest.mark.parametrize("allowlist", ["Me+1@gmail.com;me@gmail.com", "me+1@gmail.com, me@gmail.com", "me+1@gmail.com me@gmail.com"])
+def test_allowlist_sends_only_to_listed_addresses(smtp, monkeypatch, caplog, allowlist):
+    monkeypatch.setenv("MAIL_ALLOWLIST", allowlist)
+    mailer.send(["ME+1@gmail.com", "real.member@example.com"], "Your Secret Santa match", "Body")
+    assert sent_to(smtp) == ["ME+1@gmail.com"]
+    # Skipped addresses are counted, not logged
+    assert "1 address(es) off the list" in caplog.text and "real.member" not in caplog.text
+
+
+def test_allowlist_with_nobody_left_sends_nothing(smtp, monkeypatch):
+    monkeypatch.setenv("MAIL_ALLOWLIST", "me@gmail.com")
+    mailer.send(["real.member@example.com"], "s", "b")
+    assert smtp == []
+
+
+def test_without_an_allowlist_everyone_is_emailed(smtp, monkeypatch):
+    monkeypatch.setenv("MAIL_ALLOWLIST", "  ")
+    mailer.send(["a@example.com", "b@example.com"], "s", "b")
+    assert sent_to(smtp) == ["a@example.com, b@example.com"]
+
+
+def test_log_mode_never_connects_and_needs_no_login(smtp, monkeypatch, caplog):
+    monkeypatch.delenv("SMTP_PASSWORD")
+    monkeypatch.setenv("MAIL_MODE", "log")
+    mailer.send(["a@example.com"], "Your Secret Santa match", "Hi Ann")
+    assert smtp == []
+    assert "To: a@example.com" in caplog.text and "Hi Ann" in caplog.text
+
+
+def test_allowlist_applies_in_log_mode_too(smtp, monkeypatch, caplog):
+    monkeypatch.setenv("MAIL_MODE", "log")
+    monkeypatch.setenv("MAIL_ALLOWLIST", "me@gmail.com")
+    mailer.send(["real.member@example.com"], "s", "b")
+    assert "To:" not in caplog.text

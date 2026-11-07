@@ -82,3 +82,6 @@ functions/shared/
 .agents/
 .claude/
 skills-lock.json
+
+# Real member emails for scripts/seed_config.py
+scripts/invites.txt
